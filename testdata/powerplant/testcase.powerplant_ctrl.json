@@ -1,0 +1,23 @@
+{
+	"power_plant_models":
+	{
+		"ice":
+	 	{
+			"path": "ice",
+			"T_ff": "ff:in1",
+			"T_bf": "bf:out1",
+			"m": "ff:in1",
+			"heat_bus": "heat",
+			"power_bus": "power"
+		},
+		"hp":
+	 	{
+			"path": "hp",
+			"T_ff": "ff:in1",
+			"T_bf": "bf:out1",
+			"m": "ff:in1",
+			"heat_bus": "heat",
+			"power_bus": "power"
+		}
+	}
+}

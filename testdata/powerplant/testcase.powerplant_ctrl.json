@@ -3,30 +3,21 @@
 	{
 		"ice":
 	 	{
-			"path":
-			"T_ff":
-			"T_bf":
-			"m":
-			"heat_bus":
-			"power_bus":
+			"path": "ice",
+			"T_ff": "ff:in1",
+			"T_bf": "bf:out1",
+			"m": "ff:in1",
+			"heat_bus": "heat",
+			"power_bus": "power"
 		},
 		"hp":
 	 	{
-			"path":
-			"T_ff":
-			"T_bf":
-			"m":
-			"heat_bus":
-			"power_bus":
-		},
-		"ccbp":
-	 	{
-			"path":
-			"T_ff":
-			"T_bf":
-			"m":
-			"heat_bus":
-			"power_bus":
+			"path": "hp",
+			"T_ff": "ff:in1",
+			"T_bf": "bf:out1",
+			"m": "ff:in1",
+			"heat_bus": "heat",
+			"power_bus": "power"
 		}
 	}
 }

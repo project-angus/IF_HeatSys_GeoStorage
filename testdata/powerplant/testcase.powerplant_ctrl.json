@@ -4,20 +4,73 @@
 		"ice":
 	 	{
 			"path": "ice",
-			"T_ff": "ff:in1",
-			"T_bf": "bf:out1",
-			"m": "ff:in1",
+			"init_path_low_Q": "ice_low",
+			"Q_design": 1e6,
+			"Q_low": 0.4,
+			"ff_sys": "flue gas cooler:out2_ff:in1",
+			"rf_sys": "bf:out1_cogeneration unit:in1",
 			"heat_bus": "heat",
 			"power_bus": "power"
 		},
 		"hp":
 	 	{
 			"path": "hp",
-			"T_ff": "ff:in1",
-			"T_bf": "bf:out1",
-			"m": "ff:in1",
+			"init_path_low_Q": "hp_low",
+			"Q_design": 1e6,
+			"Q_low": 0.4,
+			"ff_sys": "ff:in1",
+			"rf_sys": "bf:out1",
 			"heat_bus": "heat",
 			"power_bus": "power"
+		},
+		"eb":
+	 	{
+			"path": "eb",
+			"init_path_low_Q": "eb_low",
+			"Q_design": 1e6,
+			"Q_low": 0.001,
+			"ff_sys": "flue gas cooler:out2_ff:in1",
+			"rf_sys": "bf:out1_cogeneration unit:in1",
+			"heat_bus": "heat",
+			"power_bus": "power"
+		},
+		"plb":
+	 	{
+			"path": "hp",
+			"init_path_low_Q": "hp_low",
+			"Q_design": 1e6,
+			"Q_low": 0.01,
+			"ff_sys": "ff:in1",
+			"rf_sys": "bf:out1",
+			"heat_bus": "heat",
+			"power_bus": "None"
+		},
+		"he_charge":
+	 	{
+			"path": "he_charge",
+			"init_path_low_Q": "he_charge_low",
+			"Q_design": 1e6,
+			"Q_low": 0.4,
+			"ff_sys": "heat exchanger:out1_HS in:in1",
+			"rf_sys": "HS out:out1_heat exchanger:in1",
+			"ff_sto": "heat exchanger:out2_TES in:in1",
+			"rf_sto": "TES out:out1_heat exchanger:in2",
+			"heat_bus": "heat",
+			"power_bus": "None"
+		},
+		"he_discharge":
+	 	{
+			"path": "he_discharge",
+			"init_path_low_Q": "he_discharge_low",
+			"Q_design": 1e6,
+			"Q_low": 0.4,
+			"ff_sys": "heat exchanger:out2_HS in:in1",
+			"rf_sys": "HS out:out1_heat exchanger:in2",
+			"ff_sto": "heat exchanger:out1_TES in:in1",
+			"rf_sto": "TES out:out1_heat exchanger:in1",
+			"heat_bus": "heat",
+			"power_bus": "None"
 		}
-	}
+	},
+	"storage_boost_order": ["ice", "eb", "plb"]
 }

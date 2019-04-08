@@ -1,0 +1,5 @@
+label;cp;busses;bus_param;bus_P_ref;bus_char;mode;design;offdesign;interface
+consumer feed flow;sink;[];[];[];[];auto;[];[];False
+sink ambient 1;sink;[];[];[];[];auto;[];[];False
+sink ambient 2;sink;[];[];[];[];auto;[];[];False
+coolant out;sink;[];[];[];[];auto;[];[];False

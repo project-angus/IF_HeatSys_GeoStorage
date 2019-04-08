@@ -213,15 +213,43 @@ def calc_interface_params(ppinfo, T_ff_sys, T_rf_sys, T_ff_sto, T_rf_sto, p_ff, 
 
         elif T_rf_sto <= T_rf_sys + ttd_min:
 
+            msg = 'Storage heat extraction impossible as storage temperature is below heating system return flow temperature.'
+            logging.error(msg)
+
             if ppinfo['heat_balance_only']:
                 # storage operation impossible, mass flow through heat exchanger on storage side is zero
                 # temperature at feed and return flow are identical, "T_rf_sto, T_rf_sto" is not a typo!
                 return 0, None, 0, 0, 0, T_rf_sto, T_rf_sto, 0
 
             else:
-                plant, P, Q, ti, p_ff = sim_power_plant_operation(ppinfo, T_ff_sys, T_sys, p_ff, mass_flow, Q)
+                # calculate mass flow for given return and feed flow temperature and transferred heat
+                # this is for convergence stability purposes only!
+                water.update(CP.PT_INPUTS, p_rf * 1e5, T_rf_sys + 273.15)
+                h_return = water.hmass()
+                water.update(CP.PT_INPUTS, p_ff * 1e5, T_ff_sys + 273.15)
+                h_feed = water.hmass()
+                mass_flow = Q / (h_feed - h_return)
+                plant, P, Q_plant, ti, p_ff = sim_power_plant_operation(ppinfo, T_ff_sys, T_rf_sys, p_rf, mass_flow, Q)
+
                 if plant is None:
-                   return 0, None, 0, 0, 0, T_rf_sto, T_rf_sto, 0
+                    return 0, None, 0, 0, 0, T_rf_sto, T_rf_sto, 0
+
+                Q_diff = Q - Q_plant
+                if abs(Q_diff) < ppinfo['Q_res_abs'] and abs(Q_diff / Q) < ppinfo['Q_res_rel']:
+                    # calculation complete
+                    msg = 'Calculation successful, residual value of heat flow is ' + str(round(Q_diff, 0)) + ' W.'
+                    logging.info(msg)
+                    return 0, plant, P, Q_plant, ti, T_ff_sto, T_rf_sto, 0
+                else:
+                    if it < ppinfo['max_iter']:
+                        it += 1
+                        msg = 'Start iteration loop, as residual value of heat flow (' + str(round(Q_diff, 0)) + ' W) is higher than allowed (absolute deviation ' + str(ppinfo['Q_res_abs']) + ' W, relative deviation ' + str(ppinfo['Q_res_rel']) + ').'
+                        logging.warning(msg)
+                        return calc_interface_params(ppinfo, T_ff_sys, T_rf_sys, T_ff_sto, T_rf_sto, p_ff, p_rf, Q, mode, it)
+                    else:
+                        msg = 'Reached maximum recursion depth, aborting calculation with residual heat flow of ' + str(round(Q_diff, 0)) + ' W.'
+                        logging.warning(msg)
+                        return 0, plant, P, Q_plant, ti, T_ff_sto, T_rf_sto, 0
 
         else:
             # calculate mass flow for given return and feed flow temperature and transferred heat
@@ -285,10 +313,11 @@ def calc_interface_params(ppinfo, T_ff_sys, T_rf_sys, T_ff_sto, T_rf_sto, p_ff, 
                     if it < ppinfo['max_iter']:
                         it += 1
                         msg = 'Start iteration loop, as residual value of heat flow (' + str(round(Q_diff, 0)) + ' W) is higher than allowed (absolute deviation ' + str(ppinfo['Q_res_abs']) + ' W, relative deviation ' + str(ppinfo['Q_res_rel']) + ').'
-                        logging.info(msg)
+                        logging.debug(msg)
                         return calc_interface_params(ppinfo, T_ff_sys, T_rf_sys, T_ff_sto, T_rf_sto, p_ff, he.imp_conns[heat_ex.model_data['rf_sys']].p.val, Q, mode, it)
                     else:
                         msg = 'Reached maximum recursion depth, aborting calculation with residual heat flow of ' + str(round(Q_diff, 0)) + ' W.'
+                        logging.warning(msg)
                         return Q_sto, plant, P, Q_plant, ti, T_ff_sto, T_rf_sto, m_sto
 
     else:
@@ -333,8 +362,11 @@ def sim_power_plant_operation(ppinfo, T_ff_sys, T_rf_sys, p_rf, mass_flow, Q_res
     p_rf : float
         Heating system return flow pressure.
 
-    m : float
+    mass_flow : float
         District heating water mass flow through the plant.
+
+    Q_res : float
+        Value of residual heat flow.
 
     Returns
     -------
@@ -363,8 +395,6 @@ def sim_power_plant_operation(ppinfo, T_ff_sys, T_rf_sys, p_rf, mass_flow, Q_res
         # jump to next power plant model if this is not the case
         if Q_res > models[model]['Q_design'] * models[model]['Q_min']:
             msg = 'Heat flow required (' + str(round(Q_res, 0)) + ' W) will be delivered by power plant \'' + model + '\'.'
-            logging.info(msg)
-            msg = 'power plant model: \'' + model + '\'.'
             logging.debug(msg)
             plant = models[model]['model']
             nw = plant.instance
@@ -398,15 +428,15 @@ def sim_power_plant_operation(ppinfo, T_ff_sys, T_rf_sys, p_rf, mass_flow, Q_res
                 ti = nw.imp_busses[plant.model_data['ti_bus']].P.val
                 p_ff = nw.imp_conns[plant.model_data['ff_sys']].p.val
                 msg = 'Calculation for power plant model \'' + model + '\' successful, heat flow is ' + str(round(Q, 0)) + ' W.'
-                logging.info(msg)
+                logging.debug(msg)
                 return model, P, Q, ti, p_ff
             else:
-                msg = 'Error during simulation of power plant model \'' + model + '\', trying next plant.'
-                logging.error(msg)
+                msg = 'Could not find a steady state solution for power plant model \'' + model + '\' operation, trying next plant.'
+                logging.warning(msg)
 
         else:
             msg = 'Heat flow required (' + str(round(Q_res, 0)) + ' W) below minimum possible heat flow for power plant \'' + model + '\' (' + str(round(models[model]['Q_design'] * models[model]['Q_min'])) + ' W).'
-            logging.info(msg)
+            logging.debug(msg)
 
     msg = 'Calculation not successful, could not find a solution for any power plant model regarding the heat flow requirement.'
     logging.error(msg)

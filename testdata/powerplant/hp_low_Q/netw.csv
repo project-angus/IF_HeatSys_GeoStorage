@@ -1,0 +1,2 @@
+T_max;T_min;T_unit;fluids;h_max;h_min;h_unit;m_unit;p_max;p_min;p_unit
+500;1;C;['H2O', 'NH3'];3500;15;kJ / kg;kg / s;100;0.1;bar

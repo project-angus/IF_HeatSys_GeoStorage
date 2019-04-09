@@ -19,7 +19,7 @@ import json
 global water
 water = AS('HEOS', 'water')
 
-logger.define_logging(log_path=True, log_version=True, screen_level=logging.WARNING)
+logger.define_logging(log_path=True, log_version=True, screen_level=logging.INFO)
 # %% power plant model class
 
 
@@ -31,7 +31,7 @@ def load_models(cd):
         power_plant_models.update(json.load(f))
 
     for key, val in power_plant_models['power_plant_models'].items():
-        power_plant_models['power_plant_models'][key]['model'] = model(cd, val, key)
+        power_plant_models['power_plant_models'][key]['plant'] = model(cd, val, key)
 
     return power_plant_models
 
@@ -54,6 +54,7 @@ class model:
         self.wdir = cd.working_dir + cd.powerplant_path
         self.sc = cd.scenario
         self.model_data = data
+        self.name = name
 
         self.load_tespy_model()
         self.instance.solve('offdesign', design_path=self.wdir + self.model_data['path'],
@@ -67,7 +68,7 @@ class model:
         self.instance = nwkr.load_nwk(self.wdir + self.model_data['path'])
         self.instance.set_printoptions(print_level='none')
 
-def calc_interface_params(ppinfo, T_ff_sys, T_rf_sys, T_ff_sto, T_rf_sto, p_ff, p_rf, Q, mode, it):
+def calc_interface_params(ppinfo, T_ff_sys, T_rf_sys, T_rf_sto, p_ff, p_rf, Q, mode, it):
     """
     Calculates the interface parameters at the heat exchanger of the thermal
     energy storage. The heat exchanger is always part of the network, it may
@@ -102,9 +103,6 @@ def calc_interface_params(ppinfo, T_ff_sys, T_rf_sys, T_ff_sto, T_rf_sto, p_ff, 
 
     T_rf_sys : float
         Heating system return flow temperature (from heating system).
-
-    T_ff_sto : float
-        Storage feed flow temperature (to storage).
 
     T_rf_sto : float
         Storage return flow temperature (from storage).
@@ -159,166 +157,127 @@ def calc_interface_params(ppinfo, T_ff_sys, T_rf_sys, T_ff_sto, T_rf_sto, p_ff, 
 
         ttd_min = 3
 
-        # check if the storage return flow temperature is above system feed flow temperature
-        if T_rf_sto > T_ff_sys + ttd_min:
-            msg = ('Storage return flow temperature is above heating system feed flow temperature: '
-                   'Setting system feed flow temperature and transferred heat at heat exchanger. '
-                   'Storage feed flow temperature is result of calculation!')
-            logging.debug(msg)
-            # calculate mass flow for given return and feed flow temperature and transferred heat
-            # this is for convergence stability purposes only!
-            water.update(CP.PT_INPUTS, p_rf * 1e5, T_rf_sys + 273.15)
-            h_return = water.hmass()
-            water.update(CP.PT_INPUTS, p_ff * 1e5, T_ff_sys + 273.15)
-            h_feed = water.hmass()
-            mass_flow = Q / (h_feed - h_return)
+        # calculate mass flow for given return and feed flow temperature and
+        # transferred heat, this is for convergence stability purposes only!
+        water.update(CP.PT_INPUTS, p_rf * 1e5, T_rf_sys + 273.15)
+        h_return = water.hmass()
+        water.update(CP.PT_INPUTS, p_ff * 1e5, T_ff_sys + 273.15)
+        h_feed = water.hmass()
+        mass_flow = Q / (h_feed - h_return)
 
-            # load heat exchanger model and specify heat exchanger parameters
-            heat_ex = ppinfo['power_plant_models']['he_discharge']['model']
-            he = heat_ex.instance
-#            he.iterinfo = True
-            # Heating system feed flow temperature is a result of the calculation, storage temperatures are set.
-            he.imp_conns[heat_ex.model_data['ff_sys']].set_attr(m=mass_flow, T=T_ff_sys, design=[])
-            he.imp_busses[heat_ex.model_data['heat_bus']].set_attr(P=np.nan)
-            he.imp_conns[heat_ex.model_data['rf_sys']].set_attr(T=T_rf_sys)
-            he.imp_conns[heat_ex.model_data['ff_sto']].set_attr(T=np.nan)
-            he.imp_conns[heat_ex.model_data['rf_sto']].set_attr(T=T_rf_sto)
+        # specify storage interface properties according to temperature levels
 
-            # solving
-            design = heat_ex.wdir + heat_ex.model_data['path']
-            if Q < heat_ex.model_data['Q_design'] * heat_ex.model_data['Q_low']:
-                # initialise low heat transfer cases with init_path_low_Q
-                init = heat_ex.wdir + heat_ex.model_data['init_path_low_Q']
-                he.solve('offdesign', design_path=design, init_path=init, path_abs=True)
-            else:
-                he.solve('offdesign', design_path=design, init_path=design, path_abs=True)
-
-            # solve again, this time with specified heat transfer
-            he.imp_conns[heat_ex.model_data['ff_sys']].set_attr(m=np.nan, T=T_ff_sys)
-            he.imp_busses[heat_ex.model_data['heat_bus']].set_attr(P=Q)
-            # use values from previous calculation for initialisation
-            he.solve('offdesign', design_path=design, path_abs=True)
-
-            Q_sto = he.imp_busses[heat_ex.model_data['heat_bus']].P.val
-            T_sys = he.imp_conns[heat_ex.model_data['ff_sys']].T.val
-            T_ff_sto = he.imp_conns[heat_ex.model_data['ff_sto']].T.val
-            T_rf_sto = he.imp_conns[heat_ex.model_data['rf_sto']].T.val
-            m_sto = he.imp_conns[heat_ex.model_data['ff_sto']].m.val
-
-            msg = ('Heat extraction from storage successful, feed flow temperature level met by storage heat exchanger only: '
-                   'Transferred heat in ' + mode + ' mode is ' + str(round(he.imp_busses[heat_ex.model_data['heat_bus']].P.val, 0)) + ' W, target value was ' + str(round(Q, 0)) + ' W. '
-                   'System feed flow temperature is at ' + str(round(T_sys, 1)) + ' C with storage feed flow temperature at ' + str(round(T_ff_sto, 1)) + ' C.')
-            logging.info(msg)
-            return Q_sto, None, 0, 0, 0, T_ff_sto, T_rf_sto, m_sto
-
-        elif T_rf_sto <= T_rf_sys + ttd_min:
-
+        if T_rf_sto <= T_rf_sys + ttd_min:
+            # heat extraction from storage impossible
             msg = 'Storage heat extraction impossible as storage temperature is below heating system return flow temperature.'
             logging.error(msg)
-
-            if ppinfo['heat_balance_only']:
-                # storage operation impossible, mass flow through heat exchanger on storage side is zero
-                # temperature at feed and return flow are identical, "T_rf_sto, T_rf_sto" is not a typo!
-                return 0, None, 0, 0, 0, T_rf_sto, T_rf_sto, 0
-
-            else:
-                # calculate mass flow for given return and feed flow temperature and transferred heat
-                # this is for convergence stability purposes only!
-                water.update(CP.PT_INPUTS, p_rf * 1e5, T_rf_sys + 273.15)
-                h_return = water.hmass()
-                water.update(CP.PT_INPUTS, p_ff * 1e5, T_ff_sys + 273.15)
-                h_feed = water.hmass()
-                mass_flow = Q / (h_feed - h_return)
-                plant, P, Q_plant, ti, p_ff = sim_power_plant_operation(ppinfo, T_ff_sys, T_rf_sys, p_rf, mass_flow, Q)
-
-                if plant is None:
-                    return 0, None, 0, 0, 0, T_rf_sto, T_rf_sto, 0
-
-                Q_diff = Q - Q_plant
-                if abs(Q_diff) < ppinfo['Q_res_abs'] and abs(Q_diff / Q) < ppinfo['Q_res_rel']:
-                    # calculation complete
-                    msg = 'Calculation successful, residual value of heat flow is ' + str(round(Q_diff, 0)) + ' W.'
-                    logging.info(msg)
-                    return 0, plant, P, Q_plant, ti, T_ff_sto, T_rf_sto, 0
-                else:
-                    if it < ppinfo['max_iter']:
-                        it += 1
-                        msg = 'Start iteration loop, as residual value of heat flow (' + str(round(Q_diff, 0)) + ' W) is higher than allowed (absolute deviation ' + str(ppinfo['Q_res_abs']) + ' W, relative deviation ' + str(ppinfo['Q_res_rel']) + ').'
-                        logging.warning(msg)
-                        return calc_interface_params(ppinfo, T_ff_sys, T_rf_sys, T_ff_sto, T_rf_sto, p_ff, p_rf, Q, mode, it)
-                    else:
-                        msg = 'Reached maximum recursion depth, aborting calculation with residual heat flow of ' + str(round(Q_diff, 0)) + ' W.'
-                        logging.warning(msg)
-                        return 0, plant, P, Q_plant, ti, T_ff_sto, T_rf_sto, 0
+            Q_res = Q
+            Q_sto = 0
+            m_sto = 0
+            T_ff_sto = T_rf_sto
+            T_sys = T_rf_sys
+            p_sys = p_rf
 
         else:
-            # calculate mass flow for given return and feed flow temperature and transferred heat
-            water.update(CP.PT_INPUTS, p_rf * 1e5, T_rf_sys + 273.15)
-            h_return = water.hmass()
-            water.update(CP.PT_INPUTS, p_ff * 1e5, T_ff_sys + 273.15)
-            h_feed = water.hmass()
-            mass_flow = Q / (h_feed - h_return)
-
             # load heat exchanger model and specify heat exchanger parameters
-            heat_ex = ppinfo['power_plant_models']['he_discharge']['model']
-            he = heat_ex.instance
+            plant = ppinfo['power_plant_models']['he_discharge']['plant']
+            model = plant.instance
 
-            # Heating system feed flow temperature is a result of the calculation, storage temperatures are set.
-            he.imp_conns[heat_ex.model_data['ff_sys']].set_attr(m=mass_flow, T=T_rf_sto - ttd_min)
-            he.imp_busses[heat_ex.model_data['heat_bus']].set_attr(P=np.nan)
-            he.imp_conns[heat_ex.model_data['rf_sys']].set_attr(T=T_rf_sys)
-            he.imp_conns[heat_ex.model_data['ff_sto']].set_attr(T=np.nan)
-            he.imp_conns[heat_ex.model_data['rf_sto']].set_attr(T=T_rf_sto)
+            # specify parameters
+            model.imp_busses[plant.model_data['heat_bus']].set_attr(P=np.nan)
+            model.imp_conns[plant.model_data['rf_sys']].set_attr(T=T_rf_sys)
+            model.imp_conns[plant.model_data['ff_sto']].set_attr(T=np.nan)
+            model.imp_conns[plant.model_data['rf_sto']].set_attr(T=T_rf_sto)
 
-            # solve system
-            design = heat_ex.wdir + heat_ex.model_data['path']
-            if Q < heat_ex.model_data['Q_design'] * heat_ex.model_data['Q_low']:
-                init = heat_ex.wdir + heat_ex.model_data['init_path_low_Q']
-                he.solve('offdesign', design_path=design, init_path=init, path_abs=True)
+            if T_rf_sto > T_ff_sys + ttd_min:
+                # storage temperature above system feed flow temperature
+                T = T_ff_sys
+
             else:
-               he.solve('offdesign', design_path=design, init_path=design, path_abs=True)
+                # storage temperature below system feed flow temperature
+                T = T_rf_sto - ttd_min
 
-            Q_sto = he.imp_busses[heat_ex.model_data['heat_bus']].P.val
-            T_sys = he.imp_conns[heat_ex.model_data['ff_sys']].T.val
-            T_ff_sto = he.imp_conns[heat_ex.model_data['ff_sto']].T.val
-            T_rf_sto = he.imp_conns[heat_ex.model_data['rf_sto']].T.val
-            m_sto = he.imp_conns[heat_ex.model_data['ff_sto']].m.val
+            # specify temperature value for system feed flow
+            model.imp_conns[plant.model_data['ff_sys']].set_attr(m=mass_flow, T=T, design=[])
 
+            # solving
+            design = plant.wdir + plant.model_data['path']
+            if Q < plant.model_data['Q_design'] * plant.model_data['Q_low']:
+                # initialise low heat transfer cases with init_path_low_Q
+                init = plant.wdir + plant.model_data['init_path_low_Q']
+                model.solve('offdesign', design_path=design, init_path=init, path_abs=True)
+            else:
+                model.solve('offdesign', design_path=design, init_path=design, path_abs=True)
+
+            if T_rf_sto > T_ff_sys + ttd_min:
+                # system feed flow temperature requirement met by heat exchanger
+                # solve again, this time with specified heat transfer
+                model.imp_conns[plant.model_data['ff_sys']].set_attr(m=np.nan, T=T_ff_sys)
+                model.imp_busses[plant.model_data['heat_bus']].set_attr(P=Q)
+                # use values from previous calculation for initialisation
+                model.solve('offdesign', design_path=design, path_abs=True)
+
+                # get storage heat exchanger parameters
+                Q_sto = model.imp_busses[plant.model_data['heat_bus']].P.val
+                T_sys = model.imp_conns[plant.model_data['ff_sys']].T.val
+                T_ff_sto = model.imp_conns[plant.model_data['ff_sto']].T.val
+                T_rf_sto = model.imp_conns[plant.model_data['rf_sto']].T.val
+                m_sto = model.imp_conns[plant.model_data['ff_sto']].m.val
+
+                msg = ('Heat extraction from storage successful, feed flow temperature level met by storage heat exchanger only: '
+                       'Transferred heat in ' + mode + ' mode is ' + str(round(model.imp_busses[plant.model_data['heat_bus']].P.val, 0)) + ' W, target value was ' + str(round(Q, 0)) + ' W. '
+                       'System feed flow temperature is at ' + str(round(T_sys, 1)) + ' C with storage feed flow temperature at ' + str(round(T_ff_sto, 1)) + ' C.')
+                logging.info(msg)
+                return Q_sto, None, 0, 0, 0, T_ff_sto, T_rf_sto, m_sto
+
+            # get storage heat exchanger parameters
+            Q_sto = model.imp_busses[plant.model_data['heat_bus']].P.val
+            T_sys = model.imp_conns[plant.model_data['ff_sys']].T.val
+            T_ff_sto = model.imp_conns[plant.model_data['ff_sto']].T.val
+            T_rf_sto = model.imp_conns[plant.model_data['rf_sto']].T.val
+            m_sto = model.imp_conns[plant.model_data['ff_sto']].m.val
+            Q_res = Q - Q_sto
+            # heating system pressure for storage booster is pressure after
+            # heat exchanger
+            p_sys = model.imp_conns[plant.model_data['ff_sys']].p.val
+
+            # system feed flow temperature not met by heat exchanger
+            # calculate storage booster operation
             msg = ('Heat extraction from storage successful, feed flow temperature level NOT met by storage heat exchanger only: '
-                   'Transferred heat in ' + mode + ' mode is ' + str(round(he.imp_busses[heat_ex.model_data['heat_bus']].P.val, 0)) + ' W, target value was ' + str(round(Q, 0)) + ' W. '
+                   'Transferred heat in ' + mode + ' mode is ' + str(round(model.imp_busses[plant.model_data['heat_bus']].P.val, 0)) + ' W, target value was ' + str(round(Q, 0)) + ' W. '
                    'System feed flow temperature is at ' + str(round(T_sys, 1)) + ' C with target temperature at ' + str(round(T_ff_sys, 1)) + ' C.')
             logging.info(msg)
 
-            if ppinfo['heat_balance_only']:
-                # return storage heat exchanger parameters, no operation calculation for power plant
-                return Q_sto, None, 0, 0, 0, T_ff_sto, T_rf_sto, m_sto
+        # storage booster calculation (both, for failed and partial heat extraction)
+        if ppinfo['heat_balance_only']:
+            # storage operation impossible, mass flow through heat exchanger on storage side is zero
+            # temperature at feed and return flow are identical, "T_rf_sto, T_rf_sto" is not a typo!
+            return 0, None, 0, 0, 0, T_ff_sto, T_rf_sto, m_sto
 
-            else:
-            # calculate residual for transferred heat
-                Q_res = Q - Q_sto
+        else:
+            # calculate power plant operation to replace heat extraction
+            for sto_booster in ppinfo['storage_boost_order']:
+                plant = ppinfo['power_plant_models'][sto_booster]['plant']
 
-                p_sys = he.imp_conns[heat_ex.model_data['ff_sys']].p.val
-                plant, P, Q_plant, ti, p_ff = sim_power_plant_operation(ppinfo, T_ff_sys, T_sys, p_sys, mass_flow, Q_res)
+                data = sim_power_plant_operation(plant, T_ff_sys, T_sys, p_sys, mass_flow, Q_res)
 
-                if plant is None:
-                   return Q_sto, None, 0, 0, 0, T_ff_sto, T_rf_sto, m_sto
+                if data[0]:
+                    # power plant operation possible
+                    P_plant = data[1]
+                    Q_plant = data[2]
+                    ti_plant = data[3]
+                    Q_diff = Q_res - Q_plant
 
-                Q_diff = Q_res - Q_plant
-                if abs(Q_diff) < ppinfo['Q_res_abs'] and abs(Q_diff / Q) < ppinfo['Q_res_rel']:
-                    # calculation complete
-                    msg = 'Calculation successful, residual value of heat flow is ' + str(round(Q_diff, 0)) + ' W.'
+                    msg = ('Calculation successful, residual value of heat flow is ' + str(round(Q_diff, 0)) + ' W, relative deviation is ' + str(round(Q_diff / Q, 4)) + '. '
+                           'Power plant booster is \'' + sto_booster + '\'.')
                     logging.info(msg)
-                    return Q_sto, plant, P, Q_plant, ti, T_ff_sto, T_rf_sto, m_sto
-                else:
-                    if it < ppinfo['max_iter']:
-                        it += 1
-                        msg = 'Start iteration loop, as residual value of heat flow (' + str(round(Q_diff, 0)) + ' W) is higher than allowed (absolute deviation ' + str(ppinfo['Q_res_abs']) + ' W, relative deviation ' + str(ppinfo['Q_res_rel']) + ').'
-                        logging.debug(msg)
-                        return calc_interface_params(ppinfo, T_ff_sys, T_rf_sys, T_ff_sto, T_rf_sto, p_ff, he.imp_conns[heat_ex.model_data['rf_sys']].p.val, Q, mode, it)
-                    else:
-                        msg = 'Reached maximum recursion depth, aborting calculation with residual heat flow of ' + str(round(Q_diff, 0)) + ' W.'
-                        logging.warning(msg)
-                        return Q_sto, plant, P, Q_plant, ti, T_ff_sto, T_rf_sto, m_sto
+
+                    return Q_sto, sto_booster, P_plant, Q_plant, ti_plant, T_ff_sto, T_rf_sto, m_sto
+
+            # no power plant operation possible
+            msg = 'No power plant operation possible, heating system feed flow temperature could not be reached.'
+            logging.error(msg)
+            return Q_sto, None, 0, 0, 0, T_ff_sto, T_rf_sto, m_sto
 
     else:
         msg = 'Mode for interface parameter calculation at coupled_simulation.powerplant must be \'charging\' or \'discharging\'.'
@@ -326,7 +285,7 @@ def calc_interface_params(ppinfo, T_ff_sys, T_rf_sys, T_ff_sto, T_rf_sto, p_ff, 
         raise ValueError(msg)
 
 
-def sim_power_plant_operation(ppinfo, T_ff_sys, T_rf_sys, p_rf, mass_flow, Q_res):
+def sim_power_plant_operation(plant, T_ff_sys, T_rf_sys, p_rf, mass_flow, Q_res):
     """
     Calculate
 
@@ -350,8 +309,8 @@ def sim_power_plant_operation(ppinfo, T_ff_sys, T_rf_sys, p_rf, mass_flow, Q_res
 
     Parameters
     ----------
-    ppinfo : dict
-        Dictionary with information on TESPy power plant models.
+    plant : coupled_simulation.powerplant.model
+        Power plant model object, holding power plant information.
 
     T_ff_sys : float
         Heating system feed flow temperature (to heating system).
@@ -370,8 +329,8 @@ def sim_power_plant_operation(ppinfo, T_ff_sys, T_rf_sys, p_rf, mass_flow, Q_res
 
     Returns
     -------
-    plant : str
-        Name of additional power plant.
+    success : bool
+        Calculation successful.
 
     Q_plant : float
         Transferred heat from additional power plant.
@@ -381,63 +340,52 @@ def sim_power_plant_operation(ppinfo, T_ff_sys, T_rf_sys, p_rf, mass_flow, Q_res
 
     ti_plant : float
         Thermal input of additional power plant.
-
-    p_ff : float
-        Feed flow pressure of disctrict heating water.
     """
 
-    models = ppinfo['power_plant_models']
-    order = ppinfo['storage_boost_order']
+    model = plant.instance
+    Q_min = plant.model_data['Q_design'] * plant.model_data['Q_min']
 
-    # go through the order of plants defined in the powerplant control file
-    for model in order:
-        # check if minimum heat flow of the plant is larger than required residual heat flow
-        # jump to next power plant model if this is not the case
-        if Q_res > models[model]['Q_design'] * models[model]['Q_min']:
-            msg = 'Heat flow required (' + str(round(Q_res, 0)) + ' W) will be delivered by power plant \'' + model + '\'.'
-            logging.debug(msg)
-            plant = models[model]['model']
-            nw = plant.instance
-            nw.imp_conns[plant.model_data['ff_sys']].set_attr(T=T_ff_sys)
-            nw.imp_conns[plant.model_data['rf_sys']].set_attr(m=mass_flow, p=p_rf, T=T_rf_sys)
-            nw.imp_busses[plant.model_data['heat_bus']].set_attr(P=np.nan)
-            design = plant.wdir + plant.model_data['path']
+    if Q_res < Q_min:
+        msg = ('Power plant operation of plant \'' + plant.name + '\' not possible due to load restriction: '
+               'Heat flow required (' + str(round(Q_res, 0)) + ' W) below minimum possible heat flow for power plant \'' + plant.name + '\' (' + str(round(Q_min, 0)) + ' W).')
+        logging.debug(msg)
+        return False, 0, 0, 0
 
-            # solving
-            design = plant.wdir + plant.model_data['path']
-            if Q_res < plant.model_data['Q_design'] * plant.model_data['Q_low']:
-                # initialise low heat transfer cases with init_path_low_Q
-                init = plant.wdir + plant.model_data['init_path_low_Q']
-                try:
-                    nw.solve('offdesign', design_path=design, init_path=init, path_abs=True)
-                except ValueError:
-                    msg = 'Encountered ValueError in (most likely fluid property) calculation at plant \'' + model + '\'. Skipping to next plant in order. If this happens frequently, the power plant might not be suited for the respective task.'
-                    logging.error(msg)
-                    continue
-            else:
-                try:
-                    nw.solve('offdesign', design_path=design, init_path=design, path_abs=True)
-                except ValueError:
-                    msg = 'Encountered ValueError in (most likely fluid property) calculation at plant \'' + model + '\'. Skipping to next plant in order. If this happens frequently, the power plant might not be suited for the respective task.'
-                    logging.error(msg)
-                    continue
+    msg = 'Heat flow required (' + str(round(Q_res, 0)) + ' W) will be delivered by power plant \'' + plant.name + '\'.'
+    logging.debug(msg)
 
-            if nw.res[-1] < 1e-3 and not nw.lin_dep:
-                P = nw.imp_busses[plant.model_data['power_bus']].P.val
-                Q = nw.imp_busses[plant.model_data['heat_bus']].P.val
-                ti = nw.imp_busses[plant.model_data['ti_bus']].P.val
-                p_ff = nw.imp_conns[plant.model_data['ff_sys']].p.val
-                msg = 'Calculation for power plant model \'' + model + '\' successful, heat flow is ' + str(round(Q, 0)) + ' W.'
-                logging.debug(msg)
-                return model, P, Q, ti, p_ff
-            else:
-                msg = 'Could not find a steady state solution for power plant model \'' + model + '\' operation, trying next plant.'
-                logging.warning(msg)
+    # parameter specification
+    model.imp_conns[plant.model_data['ff_sys']].set_attr(T=T_ff_sys)
+    model.imp_conns[plant.model_data['rf_sys']].set_attr(m=mass_flow, p=p_rf, T=T_rf_sys)
+    model.imp_busses[plant.model_data['heat_bus']].set_attr(P=np.nan)
 
-        else:
-            msg = 'Heat flow required (' + str(round(Q_res, 0)) + ' W) below minimum possible heat flow for power plant \'' + model + '\' (' + str(round(models[model]['Q_design'] * models[model]['Q_min'])) + ' W).'
-            logging.debug(msg)
+    # solving
+    design = plant.wdir + plant.model_data['path']
+    if Q_res < plant.model_data['Q_design'] * plant.model_data['Q_low']:
+        # initialise low heat transfer cases with init_path_low_Q
+        init = plant.wdir + plant.model_data['init_path_low_Q']
+        try:
+            model.solve('offdesign', design_path=design, init_path=init, path_abs=True)
+        except ValueError:
+            msg = 'Encountered ValueError in (most likely fluid property) calculation at plant \'' + plant.name + '\'. Skipping to next plant in order. If this happens frequently, the power plant might not be suited for the respective task.'
+            logging.error(msg)
+            return False, 0, 0, 0
+    else:
+        try:
+            model.solve('offdesign', design_path=design, init_path=design, path_abs=True)
+        except ValueError:
+            msg = 'Encountered ValueError in (most likely fluid property) calculation at plant \'' + plant.name + '\'. Skipping to next plant in order. If this happens frequently, the power plant might not be suited for the respective task.'
+            logging.error(msg)
+            return False, 0, 0, 0
 
-    msg = 'Calculation not successful, could not find a solution for any power plant model regarding the heat flow requirement.'
-    logging.error(msg)
-    return None, 0, 0, 0, 0
+    if model.res[-1] < 1e-3 and not model.lin_dep:
+        P = model.imp_busses[plant.model_data['power_bus']].P.val
+        Q = model.imp_busses[plant.model_data['heat_bus']].P.val
+        ti = model.imp_busses[plant.model_data['ti_bus']].P.val
+        msg = 'Calculation for power plant model \'' + plant.name + '\' successful, heat flow is ' + str(round(Q, 0)) + ' W.'
+        logging.debug(msg)
+        return True, P, Q, ti
+    else:
+        msg = 'Could not find a steady state solution for power plant model \'' + plant + '\' operation, trying next plant.'
+        logging.warning(msg)
+        return False, 0, 0, 0

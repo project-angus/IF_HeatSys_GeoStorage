@@ -83,8 +83,5 @@
 		}
 	},
 	"storage_boost_order": ["ice", "plb", "eb"],
-	"Q_res_abs": 10,
-	"Q_res_rel": 0.005,
-	"max_iter": 3,
 	"heat_balance_only": false
 }

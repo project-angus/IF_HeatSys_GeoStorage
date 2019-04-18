@@ -71,14 +71,45 @@ def __main__(path):
 #    # create instances for power plant and storage
 #    geostorage = gs.geo_sto(cd)
 
-    power_plant_path = cd.working_dir + cd.powerplant_path + cd.scenario + '.powerplant_ctrl.json'
-    power_plant_info = {}
-    with open(power_plant_path) as f:
-        power_plant_info.update(json.load(f))
+    power_plant_info = pp.load_models(cd)
 
-    for key, val in power_plant_info['power_plant_models'].items():
-        power_plant_info['power_plant_models'][key] = pp.model(cd, val)
-        print(val, key)
+    print('############################################')
+
+    print(pp.calc_interface_params(power_plant_info, 75, 60, 110, 9, 10, 10e5, 'discharging', 0))
+
+    print('############################################')
+#    print(pp.calc_interface_params(power_plant_info, 78, 60, 65, 100, 10, 9, 9e5, 'discharging', 0))
+#    print(pp.calc_interface_params(power_plant_info, 78, 60, 65, 100, 10, 9, 8e5, 'discharging', 0))
+#    print(pp.calc_interface_params(power_plant_info, 78, 60, 65, 100, 10, 9, 7e5, 'discharging', 0))
+#    print(pp.calc_interface_params(power_plant_info, 78, 60, 65, 100, 10, 9, 6e5, 'discharging', 0))
+#    print(pp.calc_interface_params(power_plant_info, 78, 60, 65, 100, 10, 9, 5e5, 'discharging', 0))
+    print(pp.calc_interface_params(power_plant_info, 90, 70, 70, 9, 10, 5e5, 'discharging', 0))
+
+    print('############################################')
+#    print(pp.calc_interface_params(power_plant_info, 78, 60, 65, 100, 10, 9, 3e5, 'discharging', 0))
+    print(pp.calc_interface_params(power_plant_info, 90, 60, 75, 9, 10, 2e5, 'discharging', 0))
+
+    print('############################################')
+#    print(pp.calc_interface_params(power_plant_info, 78, 60, 65, 100, 10, 9, 1.9e5, 'discharging', 0))
+#    print(pp.calc_interface_params(power_plant_info, 78, 60, 65, 100, 10, 9, 1.8e5, 'discharging', 0))
+#    print(pp.calc_interface_params(power_plant_info, 78, 60, 65, 100, 10, 9, 1.7e5, 'discharging', 0))
+#    print(pp.calc_interface_params(power_plant_info, 78, 60, 65, 100, 10, 9, 1.6e5, 'discharging', 0))
+#    print(pp.calc_interface_params(power_plant_info, 78, 60, 65, 100, 10, 9, 1.6e5, 'discharging', 0))
+#    print(pp.calc_interface_params(power_plant_info, 78, 60, 65, 100, 10, 9, 1.5e5, 'discharging', 0))
+#    print(pp.calc_interface_params(power_plant_info, 78, 60, 65, 100, 10, 9, 1.4e5, 'discharging', 0))
+#    print(pp.calc_interface_params(power_plant_info, 78, 60, 65, 100, 10, 9, 1.3e5, 'discharging', 0))
+#    print(pp.calc_interface_params(power_plant_info, 78, 60, 65, 100, 10, 9, 1.2e5, 'discharging', 0))
+#    print(pp.calc_interface_params(power_plant_info, 78, 60, 65, 100, 10, 9, 1.1e5, 'discharging', 0))
+#    print(pp.calc_interface_params(power_plant_info, 78, 60, 65, 100, 10, 9, 1.0e5, 'discharging', 0))
+#    print(pp.calc_interface_params(power_plant_info, 78, 60, 65, 100, 10, 9, 0.5e5, 'discharging', 0))
+    print(pp.calc_interface_params(power_plant_info, 88, 60, 80, 9, 10, 5e5, 'discharging', 0))
+    print(pp.calc_interface_params(power_plant_info, 85, 60, 75, 9, 10, 3e5, 'discharging', 0))
+
+    print('############################################')
+
+    print(power_plant_models)
+
+    mo
 
     print('######################################################################')
     print('Reading input time series...')
@@ -271,85 +302,85 @@ def __main__(path):
 #    return ts
 #
 #
-#class coupling_data:
-#    """
-#    creates a data container with the main model parameters
-#
-#    :returns: no return value
-#    """
-#
-#    def __init__(self, path):
-#
-#        # load data.json information into objects dictionary (= attributes of
-#        # the object)
-#        self.path = path
-#
-#        with open(path) as f:
-#            self.__dict__.update(json.load(f))
-#
-#        self.auto_eval_output = False
-#
-#        if self.eval_output == "True":
-#            self.auto_eval_output = True
-#
-#        self.coupled_simulation()
-#
-#    def coupled_simulation(self):
-#        """
-#        Function to set all required default data, e.g. well names, paths, ...
-#
-#        :returns: no return value
-#        """
-#
-#        str_tmp = self.path.strip('.main_ctrl.json')
-#        self.scenario = ""
-#        self.working_dir = ""
-#
-#        i = 0
-#        key = ""
-#        if os.name == 'nt':
-#            key = "\\"
-#            self.powerplant_path = self.powerplant_path.replace('/', '\\')
-#            self.geostorage_path = self.geostorage_path.replace('/', '\\')
-#            self.input_timeseries_path = self.input_timeseries_path.replace('/', '\\')
-#            self.output_timeseries_path = self.output_timeseries_path.replace('/', '\\')
-#        elif os.name == 'posix':
-#            key = "/"
-#            self.powerplant_path = self.powerplant_path.replace('\\', '/')
-#            self.geostorage_path = self.geostorage_path.replace('\\', '/')
-#            self.input_timeseries_path = self.input_timeseries_path.replace('\\', '/')
-#            self.output_timeseries_path = self.output_timeseries_path.replace('\\', '/')
-#        else:
-#            print('Error: OS not supported')
-#
-#
-#        for c in str_tmp[::-1]:
-#            if c == key:
-#                self.working_dir = str_tmp[:-i]
-#                break
-#            self.scenario += c
-#            i += 1
-#
-#        self.scenario = self.scenario[::-1]
-#        self.debug = bool(self.debug)
-#        date_format = '%Y-%m-%d %H:%M:%S'
-#        self.t_start = datetime.datetime.strptime(self.t_start, date_format)
-#
-#        print('Reading inputile \"' + self.scenario + '.main_ctrl.json\" '
-#              'in working directory \"' + self.working_dir + '\"')
-#
-#'''        if self.debug:
-#            print('DEBUG-OUTPUT for main control data')
-#            print('Time series path:\t' + self.input_timeseries_path)
-#            print('Start time:\t' + str(self.t_start))
-#            print('Time step length:\t' + str(self.t_step_length))
-#            print('Number of time steps:\t' + str(self.t_steps_total))
-#            print('Iteration limits:\t' + str(self.min_iter) + '\t' +
-#                  str(self.max_iter))
-#            print('Pressure convergence criteria:\t' +
-#                  str(self.pressure_diff_abs) +
-#                  ' bars\t' + str(self.pressure_diff_rel * 100) + ' %')
-#            print('END of DEBUG-OUTPUT for main control data')'''
+class coupling_data:
+    """
+    creates a data container with the main model parameters
+
+    :returns: no return value
+    """
+
+    def __init__(self, path):
+
+        # load data.json information into objects dictionary (= attributes of
+        # the object)
+        self.path = path
+
+        with open(path) as f:
+            self.__dict__.update(json.load(f))
+
+        self.auto_eval_output = False
+
+        if self.eval_output == "True":
+            self.auto_eval_output = True
+
+        self.coupled_simulation()
+
+    def coupled_simulation(self):
+        """
+        Function to set all required default data, e.g. well names, paths, ...
+
+        :returns: no return value
+        """
+
+        str_tmp = self.path.strip('.main_ctrl.json')
+        self.scenario = ""
+        self.working_dir = ""
+
+        i = 0
+        key = ""
+        if os.name == 'nt':
+            key = "\\"
+            self.powerplant_path = self.powerplant_path.replace('/', '\\')
+            self.geostorage_path = self.geostorage_path.replace('/', '\\')
+            self.input_timeseries_path = self.input_timeseries_path.replace('/', '\\')
+            self.output_timeseries_path = self.output_timeseries_path.replace('/', '\\')
+        elif os.name == 'posix':
+            key = "/"
+            self.powerplant_path = self.powerplant_path.replace('\\', '/')
+            self.geostorage_path = self.geostorage_path.replace('\\', '/')
+            self.input_timeseries_path = self.input_timeseries_path.replace('\\', '/')
+            self.output_timeseries_path = self.output_timeseries_path.replace('\\', '/')
+        else:
+            print('Error: OS not supported')
+
+
+        for c in str_tmp[::-1]:
+            if c == key:
+                self.working_dir = str_tmp[:-i]
+                break
+            self.scenario += c
+            i += 1
+
+        self.scenario = self.scenario[::-1]
+        self.debug = bool(self.debug)
+        date_format = '%Y-%m-%d %H:%M:%S'
+        self.t_start = datetime.datetime.strptime(self.t_start, date_format)
+
+        print('Reading inputile \"' + self.scenario + '.main_ctrl.json\" '
+              'in working directory \"' + self.working_dir + '\"')
+
+'''        if self.debug:
+            print('DEBUG-OUTPUT for main control data')
+            print('Time series path:\t' + self.input_timeseries_path)
+            print('Start time:\t' + str(self.t_start))
+            print('Time step length:\t' + str(self.t_step_length))
+            print('Number of time steps:\t' + str(self.t_steps_total))
+            print('Iteration limits:\t' + str(self.min_iter) + '\t' +
+                  str(self.max_iter))
+            print('Pressure convergence criteria:\t' +
+                  str(self.pressure_diff_abs) +
+                  ' bars\t' + str(self.pressure_diff_rel * 100) + ' %')
+            print('END of DEBUG-OUTPUT for main control data')'''
 #
 #class Logger(object):
 #

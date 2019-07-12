@@ -58,7 +58,7 @@ class model:
 
         self.load_tespy_model()
         self.instance.solve('offdesign', design_path=self.wdir + self.model_data['path'],
-                            init_path=self.wdir + self.model_data['path'], path_abs=True)
+                            init_path=self.wdir + self.model_data['path'])
         msg = 'Successfully loaded TESPy model ' + name + '.'
         logging.debug(msg)
 
@@ -205,9 +205,9 @@ def calc_interface_params(ppinfo, T_ff_sys, T_rf_sys, T_rf_sto, p_ff, p_rf, Q, m
             if Q < plant.model_data['Q_design'] * plant.model_data['Q_low']:
                 # initialise low heat transfer cases with init_path_low_Q
                 init = plant.wdir + plant.model_data['init_path_low_Q']
-                model.solve('offdesign', design_path=design, init_path=init, path_abs=True)
+                model.solve('offdesign', design_path=design, init_path=init)
             else:
-                model.solve('offdesign', design_path=design, init_path=design, path_abs=True)
+                model.solve('offdesign', design_path=design, init_path=design)
 
             if T_rf_sto > T_ff_sys + ttd_min:
                 # system feed flow temperature requirement met by heat exchanger
@@ -215,7 +215,7 @@ def calc_interface_params(ppinfo, T_ff_sys, T_rf_sys, T_rf_sto, p_ff, p_rf, Q, m
                 model.imp_conns[plant.model_data['ff_sys']].set_attr(m=np.nan, T=T_ff_sys)
                 model.imp_busses[plant.model_data['heat_bus']].set_attr(P=Q)
                 # use values from previous calculation for initialisation
-                model.solve('offdesign', design_path=design, path_abs=True)
+                model.solve('offdesign', design_path=design)
 
                 # get storage heat exchanger parameters
                 Q_sto = model.imp_busses[plant.model_data['heat_bus']].P.val
@@ -268,11 +268,22 @@ def calc_interface_params(ppinfo, T_ff_sys, T_rf_sys, T_rf_sto, p_ff, p_rf, Q, m
                     ti_plant = data[3]
                     Q_diff = Q_res - Q_plant
 
-                    msg = ('Calculation successful, residual value of heat flow is ' + str(round(Q_diff, 0)) + ' W, relative deviation is ' + str(round(Q_diff / Q, 4)) + '. '
-                           'Power plant booster is \'' + sto_booster + '\'.')
-                    logging.info(msg)
 
-                    return Q_sto, sto_booster, P_plant, Q_plant, ti_plant, T_ff_sto, T_rf_sto, m_sto
+                    if (abs(Q_diff / Q) > ppinfo['heat_max_dev_rel'] and
+                            it < ppinfo['max_iter']):
+                        msg = ('Repeat powerplant calculation, residual value of heat flow is ' + str(round(Q_diff, 0)) +
+                               ' W, relative deviation of actual heat flow to target is too high: ' + str(round(Q_diff / Q, 4)) + '.')
+                        logging.info(msg)
+                        it += 1
+                        p_ff = plant.instance.imp_conns[plant.model_data['ff_sys']].p.val
+                        return calc_interface_params(ppinfo, T_ff_sys, T_rf_sys, T_rf_sto, p_ff, p_rf, Q, mode, it)
+
+                    else:
+                        msg = ('Calculation successful, residual value of heat flow is ' + str(round(Q_diff, 0)) + ' W, relative deviation is ' + str(round(Q_diff / Q, 4)) + '. '
+                               'Power plant booster is \'' + sto_booster + '\'.')
+                        logging.info(msg)
+
+                        return Q_sto, sto_booster, P_plant, Q_plant, ti_plant, T_ff_sto, T_rf_sto, m_sto
 
             # no power plant operation possible
             msg = 'No power plant operation possible, heating system feed flow temperature could not be reached.'
@@ -365,20 +376,20 @@ def sim_power_plant_operation(plant, T_ff_sys, T_rf_sys, p_rf, mass_flow, Q_res)
         # initialise low heat transfer cases with init_path_low_Q
         init = plant.wdir + plant.model_data['init_path_low_Q']
         try:
-            model.solve('offdesign', design_path=design, init_path=init, path_abs=True)
+            model.solve('offdesign', design_path=design, init_path=init)
         except ValueError:
             msg = 'Encountered ValueError in (most likely fluid property) calculation at plant \'' + plant.name + '\'. Skipping to next plant in order. If this happens frequently, the power plant might not be suited for the respective task.'
             logging.error(msg)
             return False, 0, 0, 0
     else:
         try:
-            model.solve('offdesign', design_path=design, init_path=design, path_abs=True)
+            model.solve('offdesign', design_path=design, init_path=design)
         except ValueError:
             msg = 'Encountered ValueError in (most likely fluid property) calculation at plant \'' + plant.name + '\'. Skipping to next plant in order. If this happens frequently, the power plant might not be suited for the respective task.'
             logging.error(msg)
             return False, 0, 0, 0
 
-    if model.res[-1] < 1e-3 and not model.lin_dep:
+    if model.res[-1] < 1e-3 and model.lin_dep is False:
         P = model.imp_busses[plant.model_data['power_bus']].P.val
         Q = model.imp_busses[plant.model_data['heat_bus']].P.val
         ti = model.imp_busses[plant.model_data['ti_bus']].P.val

@@ -51,7 +51,7 @@ class CoupledModel:
         T_rf_sto = 80
 
         for t_step in range(self.__prop.t_steps_total):
-	
+
             current_time = datetime.timedelta(seconds=t_step * self.__prop.t_step_length) + self.__prop.t_start
             info('---------------------------------------------------')
             info('INTERFACE time step {} - {}'.format(t_step, current_time))
@@ -114,8 +114,8 @@ class CoupledModel:
             info('INTERFACE start iteration {}'.format(iter))
             try:
                 # powerplant
-                Q_sto, name_plant, Q_plant, P_plant, ti_plant, T_ff_sto, T_rf_sto, m_sto = pp.calc_interface_params(
-                    self.__pp_info, T_ff_sys, T_rf_sys, T_rf_sto, p_ff_sys, p_rf_sys, abs(Q), storage_mode, 5)
+                Q_sto, name_plant, P_plant, Q_plant, ti_plant, T_ff_sto, T_rf_sto, m_sto = pp.calc_interface_params(
+                    self.__pp_info, T_ff_sys, T_rf_sys, T_rf_sto, p_ff_sys, p_rf_sys, abs(Q), storage_mode, 0)
 
                 info('POWERPLANT calculation completed')
                 # geostorage
@@ -131,13 +131,13 @@ class CoupledModel:
                 # update
                 T_rf_sto = T_rf_sto_geo
             except:
-                Q_sto, name_plant, Q_plant, P_plant, ti_plant, T_ff_sto, T_rf_sto_geo, m_sto = \
+                Q_sto, name_plant, P_plant, Q_plant, ti_plant, T_ff_sto, T_rf_sto_geo, m_sto = \
                     None, None, None, None, None, None, None, None
                 error("INTERFACE iteration failed")
 
-        return Q_sto, name_plant, Q_plant, P_plant, ti_plant, T_ff_sto, T_rf_sto_geo, m_sto
+        return Q_sto, name_plant, P_plant, Q_plant, ti_plant, T_ff_sto, T_rf_sto_geo, m_sto
 
-    def evaluate_timestep(self, t_step, current_time, name_plant, Q_target,  Q_plant, Q_sto, P_plant, ti_plant,
+    def evaluate_timestep(self, t_step, current_time, name_plant, Q_target, Q_plant, Q_sto, P_plant, ti_plant,
                           T_ff_sys, T_rf_sys,T_ff_sto, T_rf_sto, m_sto):
         """
         - write output timeseries

@@ -1,3 +1,4 @@
 label;P;P_set
-total compressor power;412546.69089385733;False
-total delivered heat;1000000.0000000001;True
+power;331890.6507981786;False
+heat;1000000.0000000001;True
+ti;0.0;False

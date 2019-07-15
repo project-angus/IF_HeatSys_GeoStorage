@@ -80,7 +80,27 @@
 			"heat_bus": "heat",
 			"power_bus": "None",
 			"ti_bus": "None"
+		},
+		"hp_discharge":
+	 	{
+			"path": "he_discharge",
+			"init_path_low_Q": "he_discharge_low",
+			"Q_design": 1e6,
+			"Q_low": 0.1,
+			"ff_sys": "heat exchanger:out2_HS in:in1",
+			"rf_sys": "HS out:out1_heat exchanger:in2",
+			"ff_sto": "heat exchanger:out1_TES in:in1",
+			"rf_sto": "TES out:out1_heat exchanger:in1",
+			"heat_bus": "heat",
+			"power_bus": "None",
+			"ti_bus": "None"
 		}
+	},
+	"discharge":
+	{
+		"restricted": true,
+		"name": "he_discharge",
+		"ttd_min": 5
 	},
 	"storage_boost_order": ["ice", "plb", "eb"],
 	"heat_balance_only": false,

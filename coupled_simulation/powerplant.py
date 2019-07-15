@@ -151,7 +151,34 @@ def calc_interface_params(ppinfo, T_ff_sys, T_rf_sys, T_rf_sto, p_ff, p_rf, Q, m
 
     if mode == 'charging':
 
-        'do something'
+        # read interface model information
+        charge = ppinfo['charge']['name']
+        ttd_restriction = ppinfo['charge']['restricted']
+        plant = ppinfo['power_plant_models'][charge]['plant']
+
+        # check for minimum heat transfer
+        Q_min = plant.model_data['Q_min'] * plant.model_data['Q_design']
+        if Q < Q_min:
+            # storage interface plant operation impossible
+            msg = ('Target heat extraction rate of ' + str(round(Q, 0)) + ' W '
+                   'below minimum possible heat extraction rate of ' +
+                   str(round(Q_min, 0)) + ' W. '
+                   'Interface operation impossible.')
+            logging.warning(msg)
+            T_ff_sto = T_rf_sto
+            return 0, None, 0, 0, 0, T_ff_sto, T_rf_sto, 0
+
+        else:
+
+            # temperature restriction for storage feed flow temperature
+            ttd = ppinfo['charge']['ttd_min']
+            IF_data = sim_IF_charge(plant, T_rf_sys, T_rf_sto, p_rf, Q, ttd)
+
+        Q_IF = IF_data[1]
+        T_ff_sto = IF_data[5]
+        m_sto = IF_data[7]
+
+        return Q_IF, None, 0, 0, 0, T_ff_sto, T_rf_sto, m_sto
 
     elif mode == 'discharging':
 
@@ -513,8 +540,95 @@ def sim_IF_discharge(plant, T_ff_sys, T_rf_sys, T_rf_sto, p_rf, Q):
     Q : float
         Value of heat flow.
 
+    Returns
+    -------
+    Q_res : float
+        Residual heat flow.
+
+    Q_IF : float
+        Transferred heat of storage interface.
+
+    P_IF : float
+        Power input/output of storage interface.
+
+    ti_IF : float
+        Thermal input of storage interface.
+
+    T_ff_sys : float
+        Heating system feed flow temperature (to heating system).
+
+    T_rf_sys : float
+        Heating system return flow temperature (to interface).
+
+    T_rf_sto : float
+        Storage return flow temperature (from storage).
+
+    mass_flow : float
+        District heating water mass flow through the plant.
+
+    p_sys : float
+        Heating system feed flow pressure.
+    """
+    model = plant.instance
+    # specify system parameters
+    model.imp_busses[plant.model_data['heat_bus']].set_attr(P=np.nan)
+    model.imp_conns[plant.model_data['rf_sys']].set_attr(T=T_rf_sys, p=p_rf)
+    model.imp_conns[plant.model_data['rf_sto']].set_attr(T=T_rf_sto)
+    model.imp_conns[plant.model_data['ff_sto']].set_attr(T=np.nan)
+    model.imp_conns[plant.model_data['ff_sys']].set_attr(m=np.nan, T=T_ff_sys, design=[])
+    model.imp_busses[plant.model_data['heat_bus']].set_attr(P=Q)
+
+    # solving
+    design = plant.wdir + plant.model_data['path']
+    if Q < plant.model_data['Q_design'] * plant.model_data['Q_low']:
+        # initialise low heat transfer cases with init_path_low_Q
+        init = plant.wdir + plant.model_data['init_path_low_Q']
+        model.solve('offdesign', design_path=design, init_path=init)
+    else:
+        model.solve('offdesign', design_path=design, init_path=design)
+
+    # storage interface temperatures
+    T_sys = model.imp_conns[plant.model_data['ff_sys']].T.val
+    T_ff_sto = model.imp_conns[plant.model_data['ff_sto']].T.val
+    T_rf_sto = model.imp_conns[plant.model_data['rf_sto']].T.val
+    # storage mass flow
+    m_sto = model.imp_conns[plant.model_data['ff_sto']].m.val
+    # pressure at heating system side of interface used as inlet pressure
+    # for storage booster operation
+    p_sys = model.imp_conns[plant.model_data['ff_sys']].p.val
+    # interface transferred energy params
+    Q_IF = model.imp_busses[plant.model_data['heat_bus']].P.val
+    P_IF = model.imp_busses[plant.model_data['power_bus']].P.val
+    ti_IF = model.imp_busses[plant.model_data['ti_bus']].P.val
+    Q_res = Q - Q_IF
+
+    return Q_res, Q_IF, P_IF, ti_IF, T_sys, T_ff_sto, T_rf_sto, m_sto, p_sys
+
+
+
+def sim_IF_charge(plant, T_rf_sys, T_rf_sto, p_rf, Q, ttd):
+    """
+    Calculate the operation of the interface plant for storage charging.
+
+    Parameters
+    ----------
+    plant : coupled_simulation.powerplant.model
+        Power plant model object, holding power plant information.
+
+    T_rf_sys : float
+        Heating system return flow temperature (to interface).
+
+    T_rf_sto : float
+        Storage return flow temperature (from storage).
+
     p_rf : float
         Heating system return flow pressure.
+
+    Q : float
+        Value of heat flow.
+
+    ttd : float
+        Terminal temperature difference.
 
     Returns
     -------
@@ -545,24 +659,16 @@ def sim_IF_discharge(plant, T_ff_sys, T_rf_sys, T_rf_sto, p_rf, Q):
     p_sys : float
         Heating system feed flow pressure.
     """
-    Q_min = plant.model_data['Q_min'] * plant.model_data['Q_design']
-    if Q < Q_min:
-        # storage interface plant operation impossible
-        msg = ('Target heat extraction rate of ' + str(round(Q, 0)) + ' W '
-               'below minimum possible heat extraction rate of ' +
-               str(round(Q_min, 0)) + ' W. Interface operation impossible.')
-        logging.warning(msg)
-        T_ff_sto = T_rf_sto
-        return Q, 0, 0, 0, T_rf_sys, T_ff_sto, T_rf_sto, 0, p_rf
-
     model = plant.instance
     # specify system parameters
     model.imp_busses[plant.model_data['heat_bus']].set_attr(P=np.nan)
+    model.imp_busses[plant.model_data['heat_bus']].set_attr(P=Q)
     model.imp_conns[plant.model_data['rf_sys']].set_attr(T=T_rf_sys, p=p_rf)
     model.imp_conns[plant.model_data['rf_sto']].set_attr(T=T_rf_sto)
-    model.imp_conns[plant.model_data['ff_sto']].set_attr(T=np.nan)
-    model.imp_conns[plant.model_data['ff_sys']].set_attr(m=np.nan, T=T_ff_sys, design=[])
-    model.imp_busses[plant.model_data['heat_bus']].set_attr(P=Q)
+    model.imp_conns[plant.model_data['ff_sto']].set_attr(T=T_rf_sys - ttd)
+    model.imp_conns[plant.model_data['ff_sys']].set_attr(m=np.nan, T=np.nan, design=[])
+
+    model.set_printoptions(print_level='info')
 
     # solving
     design = plant.wdir + plant.model_data['path']

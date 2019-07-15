@@ -19,10 +19,10 @@
 			"path": "hp",
 			"init_path_low_Q": "hp_low",
 			"Q_design": 1e6,
-			"Q_min": 0.1,
-			"Q_low": 0.5,
-			"ff_sys": "ff:in1",
-			"rf_sys": "bf:out1",
+			"Q_low": 0.4,
+			"Q_min": 0.125,
+			"ff_sys": "condenser:out2_system feed:in1",
+			"rf_sys": "system return:out1_condenser:in2",
 			"heat_bus": "heat",
 			"power_bus": "power",
 			"ti_bus": "ti"
@@ -59,6 +59,7 @@
 			"init_path_low_Q": "he_charge_low",
 			"Q_design": 1e6,
 			"Q_low": 0.1,
+			"Q_min": 0.01,
 			"ff_sys": "heat exchanger:out1_HS in:in1",
 			"rf_sys": "HS out:out1_heat exchanger:in1",
 			"ff_sto": "heat exchanger:out2_TES in:in1",
@@ -73,6 +74,7 @@
 			"init_path_low_Q": "he_discharge_low",
 			"Q_design": 1e6,
 			"Q_low": 0.1,
+			"Q_min": 0.01,
 			"ff_sys": "heat exchanger:out2_HS in:in1",
 			"rf_sys": "HS out:out1_heat exchanger:in2",
 			"ff_sto": "heat exchanger:out1_TES in:in1",
@@ -99,11 +101,11 @@
 	},
 	"discharge":
 	{
-		"restricted": false,
-		"name": "hp_discharge",
+		"restricted": true,
+		"name": "he_discharge",
 		"ttd_min": 5
 	},
-	"storage_boost_order": ["ice", "plb", "eb"],
+	"storage_boost_order": ["hp", "plb", "eb"],
 	"heat_balance_only": false,
 	"max_iter": 5,
 	"heat_max_dev_rel": 0.0001

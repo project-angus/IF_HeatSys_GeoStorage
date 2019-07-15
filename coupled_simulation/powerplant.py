@@ -168,16 +168,30 @@ def calc_interface_params(ppinfo, T_ff_sys, T_rf_sys, T_rf_sto, p_ff, p_rf, Q, m
         ttd_restriction = ppinfo['discharge']['restricted']
         plant = ppinfo['power_plant_models'][discharge]['plant']
 
-        if ttd_restriction is True:
-            # temperature restrictions for the interface (e. g. heat exchanger)
-            ttd = ppinfo['discharge']['ttd_min']
-            IF_data = sim_IF_discharge_ttd(plant, T_ff_sys, T_rf_sys,
-                                           T_rf_sto, p_rf, mass_flow, Q, ttd)
+        # check for minimum heat transfer
+        Q_min = plant.model_data['Q_min'] * plant.model_data['Q_design']
+        if Q < Q_min:
+            # storage interface plant operation impossible
+            msg = ('Target heat extraction rate of ' + str(round(Q, 0)) + ' W '
+                   'below minimum possible heat extraction rate of ' +
+                   str(round(Q_min, 0)) + ' W. '
+                   'Interface operation impossible.')
+            logging.warning(msg)
+            T_ff_sto = T_rf_sto
+            IF_data = Q, 0, 0, 0, T_rf_sys, T_ff_sto, T_rf_sto, 0, p_rf
 
         else:
-            # no temperature restrictions for the interface (e. g. heat pump)
-            IF_data = sim_IF_discharge(plant, T_ff_sys, T_rf_sys,
-                                       T_rf_sto, p_rf, mass_flow, Q)
+
+            if ttd_restriction is True:
+                # temperature restrictions for the interface (e. g. heat exchanger)
+                ttd = ppinfo['discharge']['ttd_min']
+                IF_data = sim_IF_discharge_ttd(plant, T_ff_sys, T_rf_sys,
+                                               T_rf_sto, p_rf, mass_flow, Q, ttd)
+
+            else:
+                # no temperature restrictions for the interface (e. g. heat pump)
+                IF_data = sim_IF_discharge(plant, T_ff_sys, T_rf_sys,
+                                           T_rf_sto, p_rf, Q)
 
         Q_res = IF_data[0]
         Q_IF = IF_data[1]
@@ -211,14 +225,12 @@ def calc_interface_params(ppinfo, T_ff_sys, T_rf_sys, T_rf_sto, p_ff, p_rf, Q, m
                    'temperature at ' + str(round(T_ff_sto, 1)) + ' C.')
             logging.info(msg)
 
-        # storage temperature booster calculation
         if ppinfo['heat_balance_only']:
-            # storage operation impossible, mass flow through heat exchanger on storage side is zero
-            # temperature at feed and return flow are identical, "T_rf_sto, T_rf_sto" is not a typo!
-            return 0, None, 0, 0, 0, T_ff_sto, T_rf_sto, m_sto
+            # return storage parameters only
+            return Q_IF, None, 0, 0, 0, T_ff_sto, T_rf_sto, m_sto
 
         else:
-            # calculate power plant operation to replace heat extraction
+            # calculate power plant operation to replace missing heat extraction
             for sto_booster in ppinfo['storage_boost_order']:
                 plant = ppinfo['power_plant_models'][sto_booster]['plant']
                 data = sim_power_plant_operation(plant, T_ff_sys, T_sys, p_sys, mass_flow, Q_res)
@@ -435,7 +447,7 @@ def sim_IF_discharge_ttd(plant, T_ff_sys, T_rf_sys, T_rf_sto, p_rf, mass_flow, Q
         model = plant.instance
         # specify system parameters
         model.imp_busses[plant.model_data['heat_bus']].set_attr(P=np.nan)
-        model.imp_conns[plant.model_data['rf_sys']].set_attr(T=T_rf_sys)
+        model.imp_conns[plant.model_data['rf_sys']].set_attr(T=T_rf_sys, p=p_rf)
         model.imp_conns[plant.model_data['ff_sto']].set_attr(T=np.nan)
         model.imp_conns[plant.model_data['rf_sto']].set_attr(T=T_rf_sto)
 
@@ -533,6 +545,16 @@ def sim_IF_discharge(plant, T_ff_sys, T_rf_sys, T_rf_sto, p_rf, Q):
     p_sys : float
         Heating system feed flow pressure.
     """
+    Q_min = plant.model_data['Q_min'] * plant.model_data['Q_design']
+    if Q < Q_min:
+        # storage interface plant operation impossible
+        msg = ('Target heat extraction rate of ' + str(round(Q, 0)) + ' W '
+               'below minimum possible heat extraction rate of ' +
+               str(round(Q_min, 0)) + ' W. Interface operation impossible.')
+        logging.warning(msg)
+        T_ff_sto = T_rf_sto
+        return Q, 0, 0, 0, T_rf_sys, T_ff_sto, T_rf_sto, 0, p_rf
+
     model = plant.instance
     # specify system parameters
     model.imp_busses[plant.model_data['heat_bus']].set_attr(P=np.nan)

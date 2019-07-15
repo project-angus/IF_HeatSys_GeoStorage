@@ -74,7 +74,7 @@
 			"init_path_low_Q": "he_discharge_low",
 			"Q_design": 1e6,
 			"Q_low": 0.1,
-			"Q_min": 0.01,
+			"Q_min": 0.001,
 			"ff_sys": "heat exchanger:out2_HS in:in1",
 			"rf_sys": "HS out:out1_heat exchanger:in2",
 			"ff_sto": "heat exchanger:out1_TES in:in1",

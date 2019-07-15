@@ -48,6 +48,7 @@ class CoupledModel:
         :return:
         """
         self.prepare_timestepping()
+        T_rf_sto = 80
 
         for t_step in range(self.__prop.t_steps_total):
 
@@ -55,10 +56,11 @@ class CoupledModel:
             info('---------------------------------------------------')
             info('INTERFACE time step {} - {}'.format(t_step, current_time))
 
+
             Q_target, T_ff_sys, T_rf_sys, p_ff_sys, p_rf_sys = self.get_timestep_data(str(current_time))
 
             Q_sto, name_plant, Q_plant, P_plant, ti_plant, T_ff_sto, T_rf_sto, m_sto = \
-                self.execute_timestep(Q_target, T_ff_sys, T_rf_sys, p_ff_sys, p_rf_sys)
+                self.execute_timestep(Q_target, T_ff_sys, T_rf_sys, p_ff_sys, p_rf_sys, T_rf_sto)
             # postprocess timestep
             self.evaluate_timestep(t_step, current_time, name_plant, Q_target,  Q_plant, Q_sto, P_plant, ti_plant,
                                                      T_ff_sys, T_rf_sys,T_ff_sto, T_rf_sto, m_sto)
@@ -74,11 +76,11 @@ class CoupledModel:
         :return: (floats) target heat, temperatures and pressure to / from heat network (input to execute_timestep())
         """
         try:
-            Q_target = self.__input_ts.loc[self.__input_ts.time == current_time, 'heat_target'].values[0]
-            T_ff_sys = self.__input_ts.loc[self.__input_ts.time == current_time, 'temperature_feed'].values[0]
-            T_rf_sys = self.__input_ts.loc[self.__input_ts.time == current_time, 'temperature_return'].values[0]
-            p_ff_sys = self.__input_ts.loc[self.__input_ts.time == current_time, 'pressure_feed'].values[0]
-            p_rf_sys = self.__input_ts.loc[self.__input_ts.time == current_time, 'pressure_return'].values[0]
+            Q_target = float(self.__input_ts.loc[self.__input_ts.time == current_time, 'heat_target'].values[0])
+            T_ff_sys = float(self.__input_ts.loc[self.__input_ts.time == current_time, 'temperature_feed'].values[0])
+            T_rf_sys = float(self.__input_ts.loc[self.__input_ts.time == current_time, 'temperature_return'].values[0])
+            p_ff_sys = float(self.__input_ts.loc[self.__input_ts.time == current_time, 'pressure_feed'].values[0])
+            p_rf_sys = float(self.__input_ts.loc[self.__input_ts.time == current_time, 'pressure_return'].values[0])
 
             os.system('cp {}_HEAT_TRANSPORT_domain_primary_variables.txt {}/HEAT_TRANSPORT.IC'.format(
                 self.__gs.simulation_files(), os.path.dirname(self.__gs.simulation_files())))
@@ -91,7 +93,7 @@ class CoupledModel:
 
         return Q_target, T_ff_sys, T_rf_sys, p_ff_sys, p_rf_sys
 
-    def execute_timestep(self, Q_target, T_ff_sys, T_rf_sys, p_ff_sys, p_rf_sys):
+    def execute_timestep(self, Q_target, T_ff_sys, T_rf_sys, p_ff_sys, p_rf_sys, T_rf_sto_0):
         """
         - contains interation loop
         - imitialize T_rf_sto with T_ff_sys
@@ -104,7 +106,7 @@ class CoupledModel:
         """
         # initialization
         storage_mode = 'charging' if Q_target > 0. else 'discharging'  # TO_DO: case Q_target = 0.
-        T_rf_sto = T_ff_sys
+        T_rf_sto = T_rf_sto_0
         Q = Q_target
         # iteration
         for iter in range(self.__prop.iter_max):
@@ -112,13 +114,14 @@ class CoupledModel:
             info('INTERFACE start iteration {}'.format(iter))
             try:
                 # powerplant
-                Q_sto, name_plant, Q_plant, P_plant, ti_plant, T_ff_sto, T_rf_sto, m_sto = pp.calc_interface_params(
-                    self.__pp_info, T_ff_sys, T_rf_sys, T_rf_sto, p_ff_sys, p_rf_sys, abs(Q), storage_mode, 5)
+                Q_sto, name_plant, P_plant, Q_plant, ti_plant, T_ff_sto, T_rf_sto, m_sto = pp.calc_interface_params(
+                    self.__pp_info, T_ff_sys, T_rf_sys, T_rf_sto, p_ff_sys, p_rf_sys, abs(Q), storage_mode, 0)
 
                 info('POWERPLANT calculation completed')
                 # geostorage
                 T_rf_sto_geo = self.__gs.run_storage_simulation(T_ff_sto, m_sto, storage_mode)
                 # evaluate
+                info('T_rf_sto_geo: {}'.format(T_rf_sto_geo))
 
                 error = abs(T_rf_sto_geo - T_rf_sto)
                 info('INTERFACE coupling error: {}'.format(error))
@@ -128,13 +131,13 @@ class CoupledModel:
                 # update
                 T_rf_sto = T_rf_sto_geo
             except:
-                Q_sto, name_plant, Q_plant, P_plant, ti_plant, T_ff_sto, T_rf_sto_geo, m_sto = \
+                Q_sto, name_plant, P_plant, Q_plant, ti_plant, T_ff_sto, T_rf_sto_geo, m_sto = \
                     None, None, None, None, None, None, None, None
                 error("INTERFACE iteration failed")
 
-        return Q_sto, name_plant, Q_plant, P_plant, ti_plant, T_ff_sto, T_rf_sto_geo, m_sto
+        return Q_sto, name_plant, P_plant, Q_plant, ti_plant, T_ff_sto, T_rf_sto_geo, m_sto
 
-    def evaluate_timestep(self, t_step, current_time, name_plant, Q_target,  Q_plant, Q_sto, P_plant, ti_plant,
+    def evaluate_timestep(self, t_step, current_time, name_plant, Q_target, Q_plant, Q_sto, P_plant, ti_plant,
                           T_ff_sys, T_rf_sys,T_ff_sto, T_rf_sto, m_sto):
         """
         - write output timeseries

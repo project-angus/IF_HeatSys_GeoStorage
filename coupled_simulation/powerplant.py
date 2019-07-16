@@ -172,7 +172,10 @@ def calc_interface_params(ppinfo, T_ff_sys, T_rf_sys, T_rf_sto, p_ff, p_rf, Q, m
 
             # temperature restriction for storage feed flow temperature
             ttd = ppinfo['charge']['ttd_min']
-            IF_data = sim_IF_charge(plant, T_rf_sys, T_rf_sto, p_rf, Q, ttd)
+            # system feed flow temperature as temperature at interface
+            # inlet
+            T = T_ff_sys
+            IF_data = sim_IF_charge(plant, T, T_rf_sto, p_rf, Q, ttd)
 
         Q_IF = IF_data[1]
         T_ff_sto = IF_data[5]
@@ -470,17 +473,22 @@ def sim_IF_discharge_ttd(plant, T_ff_sys, T_rf_sys, T_rf_sto, p_rf, mass_flow, Q
         p_sys = p_rf
 
     elif T_rf_sto < T_ff_sys + ttd:
+
         # maximum temperature restriction
         model = plant.instance
+        model.set_attr(m_range=[0.002, 100])
         # specify system parameters
         model.imp_busses[plant.model_data['heat_bus']].set_attr(P=np.nan)
         model.imp_conns[plant.model_data['rf_sys']].set_attr(T=T_rf_sys, p=p_rf)
         model.imp_conns[plant.model_data['ff_sto']].set_attr(T=np.nan)
         model.imp_conns[plant.model_data['rf_sto']].set_attr(T=T_rf_sto)
 
+        model.set_printoptions(print_level='info')
+
         # storage temperature below system feed flow temperature
         # specify temperature value for system feed flow
         T = T_rf_sto - ttd
+
         model.imp_conns[plant.model_data['ff_sys']].set_attr(m=mass_flow, T=T, design=[])
 
         # solving
@@ -490,7 +498,13 @@ def sim_IF_discharge_ttd(plant, T_ff_sys, T_rf_sys, T_rf_sto, p_rf, mass_flow, Q
             init = plant.wdir + plant.model_data['init_path_low_Q']
             model.solve('offdesign', design_path=design, init_path=init)
         else:
-            model.solve('offdesign', design_path=design, init_path=design)
+            try:
+                model.solve('offdesign', design_path=design)
+
+                if model.lin_dep or model.res[-1] > 1e-3:
+                    raise hlp.TESPyNetworkError
+            except (hlp.TESPyNetworkError, ValueError):
+                model.solve('offdesign', design_path=design, init_path=design)
 
         # storage interface temperatures
         T_sys = model.imp_conns[plant.model_data['ff_sys']].T.val
@@ -585,7 +599,13 @@ def sim_IF_discharge(plant, T_ff_sys, T_rf_sys, T_rf_sto, p_rf, Q):
         init = plant.wdir + plant.model_data['init_path_low_Q']
         model.solve('offdesign', design_path=design, init_path=init)
     else:
-        model.solve('offdesign', design_path=design, init_path=design)
+        try:
+            model.solve('offdesign', design_path=design)
+
+            if model.lin_dep or model.res[-1] > 1e-3:
+                raise hlp.TESPyNetworkError
+        except (hlp.TESPyNetworkError, ValueError):
+            model.solve('offdesign', design_path=design, init_path=design)
 
     # storage interface temperatures
     T_sys = model.imp_conns[plant.model_data['ff_sys']].T.val
@@ -660,6 +680,7 @@ def sim_IF_charge(plant, T_rf_sys, T_rf_sto, p_rf, Q, ttd):
         Heating system feed flow pressure.
     """
     model = plant.instance
+    model.set_attr(m_range=[0, 300])
     # specify system parameters
     model.imp_busses[plant.model_data['heat_bus']].set_attr(P=np.nan)
     model.imp_busses[plant.model_data['heat_bus']].set_attr(P=Q)
@@ -668,10 +689,9 @@ def sim_IF_charge(plant, T_rf_sys, T_rf_sto, p_rf, Q, ttd):
     model.imp_conns[plant.model_data['ff_sto']].set_attr(T=T_rf_sys - ttd)
     model.imp_conns[plant.model_data['ff_sys']].set_attr(m=np.nan, T=np.nan, design=[])
 
-    model.set_printoptions(print_level='info')
-
     # solving
     design = plant.wdir + plant.model_data['path']
+    print(plant.model_data['Q_design'] * plant.model_data['Q_low'], Q)
     if Q < plant.model_data['Q_design'] * plant.model_data['Q_low']:
         # initialise low heat transfer cases with init_path_low_Q
         init = plant.wdir + plant.model_data['init_path_low_Q']

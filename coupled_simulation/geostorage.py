@@ -39,15 +39,15 @@ class OgsKb1(GeoStorageSimulator):
         if storage_mode == 'charging':
             # ST
             os.system("sed 's/$WARM/{0}/g' {1}/_{2}.st > {1}/{2}.st".format(m_sto / density, directory, basename))
-            os.system("sed -i 's/$COLD/-{}/g' {}/{}.st".format(-m_sto / density, directory, basename))
+            os.system("sed -i 's/$COLD/{}/g' {}/{}.st".format(-m_sto / density, directory, basename))
             # BC
-            os.system("sed 's/$TYPE/WARM/g' {0}/_{2}.bc > {0}/{2}.bc".format(directory, basename))
+            os.system("sed 's/$TYPE/WARM/g' {0}/_{1}.bc > {0}/{1}.bc".format(directory, basename))
             os.system("sed -i 's/$VALUE/{}/g' {}/{}.bc".format(T_ff_sto, directory, basename))
 
         elif storage_mode == 'discharging':
             # ST
-            os.system("sed 's/$WARM/-{0}/g' {1}/_{2}.st > {1}/{2}.st".format(m_sto / density, directory, basename))
-            os.system("sed -i 's/$COLD/{}/g' {}/{}.st".format(-m_sto / density, directory, basename))
+            os.system("sed 's/$WARM/{0}/g' {1}/_{2}.st > {1}/{2}.st".format(-m_sto / density, directory, basename))
+            os.system("sed -i 's/$COLD/{}/g' {}/{}.st".format(m_sto / density, directory, basename))
             # BC
             os.system("sed 's/$TYPE/COLD/g' {0}/_{1}.bc > {0}/{1}.bc".format(directory, basename))
             os.system("sed -i 's/$VALUE/{}/g' {}/{}.bc".format(T_ff_sto, directory, basename))

@@ -157,5 +157,12 @@ class CoupledModel:
         :param m_sto: (float) mass flow rate through heat exchanger at geostorage side
         :return:
         """
+
+        try:
+            os.system('rm {}/testCase0000.vtk'.format(os.path.dirname(self.__gs.simulation_files())))
+            os.system('cp {}/testCase0001.vtk {}/testCase{}.vtk'.format(os.path.dirname(self.__gs.simulation_files()), 
+                os.path.dirname(self.__gs.simulation_files()), '000{}'.format(t_step)))
+        except:
+            pass
         self.__output_ts.loc[t_step] = np.array([current_time, name_plant, Q_target, Q_plant, Q_sto, P_plant, ti_plant,
                                                  T_ff_sys, T_rf_sys, T_ff_sto, T_rf_sto, m_sto])

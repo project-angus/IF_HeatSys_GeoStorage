@@ -4,10 +4,11 @@
 	"output_timeseries_path": "/output_timeseries.csv",
 	"geostorage_path": "geostorage/",
 	"powerplant_path": "powerplant/",
-	"t_start": "2019-01-01 00:00:00",
-	"t_steps_total": 10,
-	"t_step_length": 864000,
-	"iter_min": 2,
-	"iter_max": 5,
-	"temperature_return_error": 0.01
+	"t_start": "2030-01-01 00:00:00",
+	"t_steps_total": 8760,
+	"t_step_length": 3600,
+	"iter_min": 1,
+	"iter_max": 10,
+	"temperature_return_error": 0.01,
+	"save_nth_t_step": 50
 }

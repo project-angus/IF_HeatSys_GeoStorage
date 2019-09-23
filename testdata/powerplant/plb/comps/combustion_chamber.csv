@@ -1,2 +1,2 @@
-label;cp;busses;bus_param;bus_P_ref;bus_char;mode;design;offdesign;interface;fuel;fuel_set;fuel_var;lamb;lamb_set;lamb_var;ti;ti_set;ti_var;S;S_set;S_var
-combustion chamber;combustion_chamber;['ti'];[None];[1059040.2959256652];['0x7f1fa2736518'];auto;[];[];False;CH4;True;False;1.4999999999999996;True;False;1059040.2959256652;False;False;121743.0909178356;False;False
+label;cp;busses;bus_param;bus_P_ref;bus_char;design;offdesign;interface;design_path;fuel;fuel_set;lamb;lamb_set;lamb_var;ti;ti_set;ti_var;S;S_set;S_var
+combustion chamber;combustion_chamber;['ti'];[None];[1059040.2959257455];['0x7f2cab4872b0'];[];[];False;nan;CH4;True;1.4999999999999991;True;False;1059040.2959257455;False;False;1;False;False

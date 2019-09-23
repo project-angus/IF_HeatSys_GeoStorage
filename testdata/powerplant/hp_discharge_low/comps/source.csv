@@ -1,4 +1,4 @@
-label;cp;busses;bus_param;bus_P_ref;bus_char;mode;design;offdesign;interface
-system return;source;[];[];[];[];auto;[];[];False
-coolant in;source;[];[];[];[];auto;[];[];False
-storage return;source;[];[];[];[];auto;[];[];False
+label;cp;busses;bus_param;bus_P_ref;bus_char;design;offdesign;interface;design_path
+system return;source;[];[];[];[];[];[];False;nan
+coolant in;source;[];[];[];[];[];[];False;nan
+storage return;source;[];[];[];[];[];[];False;nan

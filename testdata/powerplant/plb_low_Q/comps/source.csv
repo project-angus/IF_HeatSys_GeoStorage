@@ -1,4 +1,4 @@
-label;cp;busses;bus_param;bus_P_ref;bus_char;mode;design;offdesign;interface
-air intake;source;[];[];[];[];auto;[];[];False
-fuel;source;[];[];[];[];auto;[];[];False
-cooling water cold;source;[];[];[];[];auto;[];[];False
+label;cp;busses;bus_param;bus_P_ref;bus_char;design;offdesign;interface;design_path
+air intake;source;[];[];[];[];[];[];False;nan
+fuel;source;[];[];[];[];[];[];False;nan
+cooling water cold;source;[];[];[];[];[];[];False;nan

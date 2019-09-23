@@ -8,10 +8,9 @@ Created on Mon Feb 12 15:17:46 2018
 
 # %% imports
 
-import pandas as pd
 import numpy as np
 import logging
-from tespy import nwkr, logger, con, hlp
+from tespy import nwkr, logger, hlp
 from CoolProp import AbstractState as AS
 import CoolProp as CP
 import json
@@ -19,19 +18,22 @@ import json
 global water
 water = AS('HEOS', 'water')
 
-logger.define_logging(log_path=True, log_version=True, screen_level=logging.INFO)
+logger.define_logging(log_version=True, file_level=logging.DEBUG,
+                      screen_level=logging.INFO)
 # %% power plant model class
 
 
 def load_models(cd):
 
-    power_plant_path = cd.working_dir + cd.powerplant_path + cd.scenario + '.powerplant_ctrl.json'
+    power_plant_path = (cd.working_dir + cd.powerplant_path +
+                        cd.scenario + '.powerplant_ctrl.json')
     power_plant_models = {}
     with open(power_plant_path) as f:
         power_plant_models.update(json.load(f))
 
     for key, val in power_plant_models['power_plant_models'].items():
-        power_plant_models['power_plant_models'][key]['plant'] = model(cd, val, key)
+        power_plant_models['power_plant_models'][key]['plant'] = model(
+                cd, val, key)
 
     return power_plant_models
 
@@ -57,7 +59,8 @@ class model:
         self.name = name
 
         self.load_tespy_model()
-        self.instance.solve('offdesign', design_path=self.wdir + self.model_data['path'],
+        self.instance.solve('offdesign',
+                            design_path=self.wdir + self.model_data['path'],
                             init_path=self.wdir + self.model_data['path'])
         msg = 'Successfully loaded TESPy model ' + name + '.'
         logging.debug(msg)
@@ -68,7 +71,9 @@ class model:
         self.instance = nwkr.load_nwk(self.wdir + self.model_data['path'])
         self.instance.set_printoptions(print_level='none')
 
-def calc_interface_params(ppinfo, T_ff_sys, T_rf_sys, T_rf_sto, p_ff, p_rf, Q, mode, it):
+
+def calc_interface_params(
+        ppinfo, T_ff_sys, T_rf_sys, T_rf_sto, p_ff, p_rf, Q, mode, it):
     """
     Calculates the interface parameters at the heat exchanger of the thermal
     energy storage. The heat exchanger is always part of the network, it may
@@ -77,21 +82,23 @@ def calc_interface_params(ppinfo, T_ff_sys, T_rf_sys, T_rf_sto, p_ff, p_rf, Q, m
 
     **Charging**
 
-    If the thermal energy storage is charged (at T_feed), the return flow temperature
-    and the mass flow through the heat exchanger on the hot side are results of the simulation.
+    If the thermal energy storage is charged (at T_feed), the return flow
+    temperature and the mass flow through the heat exchanger on the hot side
+    are results of the simulation.
 
     **Discharging**
 
-    If the thermal energy storage is discharged, the mass flow through the heat exchanger of
-    the thermal energy storage is determined by the discharging heat flow and the temperature requirements.
-    The actual feed flow temperature will be calculated by the heat exchanger providing the
-    calculated mass flow. If the target temperature cannot be met, a power plant
-    will be operated in order to meet the heat flow target. The power plant to
-    operate is predefined in the configuration files:
+    If the thermal energy storage is discharged, the mass flow through the heat
+    exchanger of the thermal energy storage is determined by the discharging
+    heat flow and the temperature requirements. The actual feed flow
+    temperature will be calculated by the heat exchanger providing the
+    calculated mass flow. If the target temperature cannot be met, a power
+    plant will be operated in order to meet the heat flow target. The power
+    plant to operate is predefined in the configuration files:
 
-    Different options are defined, one of which must be a flexible power plant, that can
-    meet any part load. This option will be used, if all of the other options cannot
-    deliver the required heat flow.
+    Different options are defined, one of which must be a flexible power plant,
+    that can meet any part load. This option will be used, if all of the other
+    options cannot deliver the required heat flow.
 
     Parameters
     ----------
@@ -172,7 +179,10 @@ def calc_interface_params(ppinfo, T_ff_sys, T_rf_sys, T_rf_sto, p_ff, p_rf, Q, m
 
             # temperature restriction for storage feed flow temperature
             ttd = ppinfo['charge']['ttd_min']
-            IF_data = sim_IF_charge(plant, T_rf_sys, T_rf_sto, p_rf, Q, ttd)
+            # system feed flow temperature as temperature at interface
+            # inlet
+            T = T_ff_sys
+            IF_data = sim_IF_charge(plant, T, T_rf_sto, p_rf, Q, ttd)
 
         Q_IF = IF_data[1]
         T_ff_sto = IF_data[5]
@@ -210,13 +220,16 @@ def calc_interface_params(ppinfo, T_ff_sys, T_rf_sys, T_rf_sto, p_ff, p_rf, Q, m
         else:
 
             if ttd_restriction is True:
-                # temperature restrictions for the interface (e. g. heat exchanger)
+                # temperature restrictions for the interface (e. g. heat
+                # exchanger)
                 ttd = ppinfo['discharge']['ttd_min']
                 IF_data = sim_IF_discharge_ttd(plant, T_ff_sys, T_rf_sys,
-                                               T_rf_sto, p_rf, mass_flow, Q, ttd)
+                                               T_rf_sto, p_rf, mass_flow, Q,
+                                               ttd)
 
             else:
-                # no temperature restrictions for the interface (e. g. heat pump)
+                # no temperature restrictions for the interface
+                # (e. g. heat pump)
                 IF_data = sim_IF_discharge(plant, T_ff_sys, T_rf_sys,
                                            T_rf_sto, p_rf, Q)
 
@@ -238,9 +251,9 @@ def calc_interface_params(ppinfo, T_ff_sys, T_rf_sys, T_rf_sto, p_ff, p_rf, Q, m
                    str(round(Q, 0)) + ' W. System feed flow temperature is '
                    'at ' + str(round(T_sys, 1)) + ' C with storage feed flow '
                    'temperature at ' + str(round(T_ff_sto, 1)) + ' C.')
-            logging.info(msg)
+            logging.debug(msg)
 
-            return Q_IF, None, 0, 0, 0, T_ff_sto, T_rf_sto, m_sto
+            return Q_IF, None, P_IF, 0, ti_IF, T_ff_sto, T_rf_sto, m_sto
 
         else:
             # heat flow target not met by the interface plant
@@ -250,17 +263,19 @@ def calc_interface_params(ppinfo, T_ff_sys, T_rf_sys, T_rf_sto, p_ff, p_rf, Q, m
                    str(round(Q, 0)) + ' W. System feed flow temperature is '
                    'at ' + str(round(T_sys, 1)) + ' C with storage feed flow '
                    'temperature at ' + str(round(T_ff_sto, 1)) + ' C.')
-            logging.info(msg)
+            logging.warning(msg)
 
         if ppinfo['heat_balance_only']:
             # return storage parameters only
             return Q_IF, None, 0, 0, 0, T_ff_sto, T_rf_sto, m_sto
 
         else:
-            # calculate power plant operation to replace missing heat extraction
+            # calculate power plant operation to replace missing heat
+            # extraction
             for sto_booster in ppinfo['storage_boost_order']:
                 plant = ppinfo['power_plant_models'][sto_booster]['plant']
-                data = sim_power_plant_operation(plant, T_ff_sys, T_sys, p_sys, mass_flow, Q_res)
+                data = sim_power_plant_operation(plant, T_ff_sys, T_sys,
+                                                 p_sys, mass_flow, Q_res)
 
                 if data[0] is True:
                     # power plant operation possible
@@ -271,32 +286,46 @@ def calc_interface_params(ppinfo, T_ff_sys, T_rf_sys, T_rf_sto, p_ff, p_rf, Q, m
 
                     if (abs(Q_diff / Q) > ppinfo['heat_max_dev_rel'] and
                             it < ppinfo['max_iter']):
-                        msg = ('Repeat powerplant calculation, residual value of heat flow is ' + str(round(Q_diff, 0)) +
-                               ' W, relative deviation of actual heat flow to target is too high: ' + str(round(Q_diff / Q, 4)) + '.')
-                        logging.info(msg)
+                        msg = ('Repeat powerplant calculation, residual value '
+                               'of heat flow is ' + str(round(Q_diff, 0)) +
+                               ' W, relative deviation of actual heat flow to '
+                               'target is too high: ' +
+                               str(round(Q_diff / Q, 4)) + '.')
+                        logging.debug(msg)
                         it += 1
-                        p_ff = plant.instance.imp_conns[plant.model_data['ff_sys']].p.val
-                        return calc_interface_params(ppinfo, T_ff_sys, T_rf_sys, T_rf_sto, p_ff, p_rf, Q, mode, it)
+                        p_ff = plant.instance.imp_conns[
+                                plant.model_data['ff_sys']].p.val
+                        return calc_interface_params(
+                                ppinfo, T_ff_sys, T_rf_sys, T_rf_sto,
+                                p_ff, p_rf, Q, mode, it)
 
                     else:
-                        msg = ('Calculation successful, residual value of heat flow is ' + str(round(Q_diff, 0)) + ' W, relative deviation is ' + str(round(Q_diff / Q, 4)) + '. '
-                               'Power plant booster is \'' + sto_booster + '\'.')
-                        logging.info(msg)
+                        msg = ('Calculation successful, residual value of '
+                               'heat flow is ' + str(round(Q_diff, 0)) +
+                               ' W, relative deviation is ' +
+                               str(round(Q_diff / Q, 4)) + '. Power plant '
+                               'booster is \'' + sto_booster + '\'.')
+                        logging.debug(msg)
 
-                        return Q_IF, sto_booster, P_plant, Q_plant, ti_plant, T_ff_sto, T_rf_sto, m_sto
+                        return (Q_IF, sto_booster, P_plant, Q_plant,
+                                ti_plant, T_ff_sto, T_rf_sto, m_sto)
 
             # no power plant operation possible
-            msg = 'No power plant operation possible, heating system target feed flow temperature could not be met.'
+            msg = ('No power plant operation possible, heating system target '
+                   'feed flow temperature could not be met.')
             logging.error(msg)
             return Q_IF, None, 0, 0, 0, T_ff_sto, T_rf_sto, m_sto
 
     else:
-        msg = 'Mode for interface parameter calculation at coupled_simulation.powerplant must be \'charging\' or \'discharging\'.'
+        msg = ('Mode for interface parameter calculation at '
+               'coupled_simulation.powerplant must be \'charging\' or '
+               '\'discharging\'.')
         logging.error(msg)
         raise ValueError(msg)
 
 
-def sim_power_plant_operation(plant, T_ff_sys, T_rf_sys, p_rf, mass_flow, Q_res):
+def sim_power_plant_operation(
+        plant, T_ff_sys, T_rf_sys,p_rf, mass_flow, Q_res):
     """
     Calculate the operation of a certain power plant given the required mass
     flow as well as the inlet and outlet temperatures regarding the heating
@@ -341,17 +370,22 @@ def sim_power_plant_operation(plant, T_ff_sys, T_rf_sys, p_rf, mass_flow, Q_res)
     Q_min = plant.model_data['Q_design'] * plant.model_data['Q_min']
 
     if Q_res < Q_min:
-        msg = ('Power plant operation of plant \'' + plant.name + '\' not possible due to load restriction: '
-               'Heat flow required (' + str(round(Q_res, 0)) + ' W) below minimum possible heat flow for power plant \'' + plant.name + '\' (' + str(round(Q_min, 0)) + ' W).')
+        msg = ('Power plant operation of plant \'' + plant.name +
+               '\' not possible due to load restriction: Heat flow required '
+               '(' + str(round(Q_res, 0)) + ' W) below minimum possible heat '
+               'flow for power plant \'' + plant.name + '\' (' +
+               str(round(Q_min, 0)) + ' W).')
         logging.debug(msg)
         return False, 0, 0, 0
 
-    msg = 'Heat flow required (' + str(round(Q_res, 0)) + ' W) will be delivered by power plant \'' + plant.name + '\'.'
+    msg = ('Heat flow required (' + str(round(Q_res, 0)) + ' W) will be '
+           'delivered by power plant \'' + plant.name + '\'.')
     logging.debug(msg)
 
     # parameter specification
     model.imp_conns[plant.model_data['ff_sys']].set_attr(T=T_ff_sys)
-    model.imp_conns[plant.model_data['rf_sys']].set_attr(m=mass_flow, p=p_rf, T=T_rf_sys)
+    model.imp_conns[plant.model_data['rf_sys']].set_attr(
+            m=mass_flow, p=p_rf, T=T_rf_sys)
     model.imp_busses[plant.model_data['heat_bus']].set_attr(P=np.nan)
 
     # solving
@@ -391,11 +425,12 @@ def sim_power_plant_operation(plant, T_ff_sys, T_rf_sys, p_rf, mass_flow, Q_res)
     else:
         msg = ('Could not find a steady state solution for power plant model '
                '\'' + plant + '\' operation, trying next plant.')
-        logging.warning(msg)
+        logging.debug(msg)
         return False, 0, 0, 0
 
 
-def sim_IF_discharge_ttd(plant, T_ff_sys, T_rf_sys, T_rf_sto, p_rf, mass_flow, Q, ttd):
+def sim_IF_discharge_ttd(
+        plant, T_ff_sys, T_rf_sys, T_rf_sto, p_rf, mass_flow, Q, ttd):
     """
     Calculate the operation of the interface plant (e. g. heat exchanger or
     heat pump) at given terminal temperature restirctions.
@@ -470,18 +505,23 @@ def sim_IF_discharge_ttd(plant, T_ff_sys, T_rf_sys, T_rf_sto, p_rf, mass_flow, Q
         p_sys = p_rf
 
     elif T_rf_sto < T_ff_sys + ttd:
+
         # maximum temperature restriction
         model = plant.instance
+        model.set_attr(m_range=[0.002, 100])
         # specify system parameters
         model.imp_busses[plant.model_data['heat_bus']].set_attr(P=np.nan)
-        model.imp_conns[plant.model_data['rf_sys']].set_attr(T=T_rf_sys, p=p_rf)
+        model.imp_conns[plant.model_data['rf_sys']].set_attr(
+                T=T_rf_sys, p=p_rf)
         model.imp_conns[plant.model_data['ff_sto']].set_attr(T=np.nan)
         model.imp_conns[plant.model_data['rf_sto']].set_attr(T=T_rf_sto)
 
         # storage temperature below system feed flow temperature
         # specify temperature value for system feed flow
         T = T_rf_sto - ttd
-        model.imp_conns[plant.model_data['ff_sys']].set_attr(m=mass_flow, T=T, design=[])
+
+        model.imp_conns[plant.model_data['ff_sys']].set_attr(
+                m=mass_flow, T=T, design=[])
 
         # solving
         design = plant.wdir + plant.model_data['path']
@@ -490,7 +530,13 @@ def sim_IF_discharge_ttd(plant, T_ff_sys, T_rf_sys, T_rf_sto, p_rf, mass_flow, Q
             init = plant.wdir + plant.model_data['init_path_low_Q']
             model.solve('offdesign', design_path=design, init_path=init)
         else:
-            model.solve('offdesign', design_path=design, init_path=design)
+            try:
+                model.solve('offdesign', design_path=design)
+
+                if model.lin_dep or model.res[-1] > 1e-3:
+                    raise hlp.TESPyNetworkError
+            except (hlp.TESPyNetworkError, ValueError):
+                model.solve('offdesign', design_path=design, init_path=design)
 
         # storage interface temperatures
         T_sys = model.imp_conns[plant.model_data['ff_sys']].T.val
@@ -575,7 +621,8 @@ def sim_IF_discharge(plant, T_ff_sys, T_rf_sys, T_rf_sto, p_rf, Q):
     model.imp_conns[plant.model_data['rf_sys']].set_attr(T=T_rf_sys, p=p_rf)
     model.imp_conns[plant.model_data['rf_sto']].set_attr(T=T_rf_sto)
     model.imp_conns[plant.model_data['ff_sto']].set_attr(T=np.nan)
-    model.imp_conns[plant.model_data['ff_sys']].set_attr(m=np.nan, T=T_ff_sys, design=[])
+    model.imp_conns[plant.model_data['ff_sys']].set_attr(
+            m=np.nan, T=T_ff_sys, design=[])
     model.imp_busses[plant.model_data['heat_bus']].set_attr(P=Q)
 
     # solving
@@ -585,7 +632,13 @@ def sim_IF_discharge(plant, T_ff_sys, T_rf_sys, T_rf_sto, p_rf, Q):
         init = plant.wdir + plant.model_data['init_path_low_Q']
         model.solve('offdesign', design_path=design, init_path=init)
     else:
-        model.solve('offdesign', design_path=design, init_path=design)
+        try:
+            model.solve('offdesign', design_path=design)
+
+            if model.lin_dep or model.res[-1] > 1e-3:
+                raise hlp.TESPyNetworkError
+        except (hlp.TESPyNetworkError, ValueError):
+            model.solve('offdesign', design_path=design, init_path=design)
 
     # storage interface temperatures
     T_sys = model.imp_conns[plant.model_data['ff_sys']].T.val
@@ -603,7 +656,6 @@ def sim_IF_discharge(plant, T_ff_sys, T_rf_sys, T_rf_sto, p_rf, Q):
     Q_res = Q - Q_IF
 
     return Q_res, Q_IF, P_IF, ti_IF, T_sys, T_ff_sto, T_rf_sto, m_sto, p_sys
-
 
 
 def sim_IF_charge(plant, T_rf_sys, T_rf_sto, p_rf, Q, ttd):
@@ -660,6 +712,7 @@ def sim_IF_charge(plant, T_rf_sys, T_rf_sto, p_rf, Q, ttd):
         Heating system feed flow pressure.
     """
     model = plant.instance
+    model.set_attr(m_range=[0, 300])
     # specify system parameters
     model.imp_busses[plant.model_data['heat_bus']].set_attr(P=np.nan)
     model.imp_busses[plant.model_data['heat_bus']].set_attr(P=Q)
@@ -667,8 +720,6 @@ def sim_IF_charge(plant, T_rf_sys, T_rf_sto, p_rf, Q, ttd):
     model.imp_conns[plant.model_data['rf_sto']].set_attr(T=T_rf_sto)
     model.imp_conns[plant.model_data['ff_sto']].set_attr(T=T_rf_sys - ttd)
     model.imp_conns[plant.model_data['ff_sys']].set_attr(m=np.nan, T=np.nan, design=[])
-
-    model.set_printoptions(print_level='info')
 
     # solving
     design = plant.wdir + plant.model_data['path']

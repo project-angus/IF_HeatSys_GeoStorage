@@ -58,8 +58,8 @@
 			"path": "he_charge",
 			"init_path_low_Q": "he_charge_low",
 			"Q_design": 1e6,
-			"Q_low": 0.2,
-			"Q_min": 0.001,
+			"Q_low": 0.3,
+			"Q_min": 0.01,
 			"ff_sys": "heat exchanger:out1_HS in:in1",
 			"rf_sys": "HS out:out1_heat exchanger:in1",
 			"ff_sto": "heat exchanger:out2_TES in:in1",
@@ -73,8 +73,8 @@
 			"path": "he_discharge",
 			"init_path_low_Q": "he_discharge_low",
 			"Q_design": 1e6,
-			"Q_low": 0.1,
-			"Q_min": 0.001,
+			"Q_low": 0.2,
+			"Q_min": 0.01,
 			"ff_sys": "heat exchanger:out2_HS in:in1",
 			"rf_sys": "HS out:out1_heat exchanger:in2",
 			"ff_sto": "heat exchanger:out1_TES in:in1",
@@ -88,8 +88,8 @@
 			"path": "hp_discharge",
 			"init_path_low_Q": "hp_discharge_low",
 			"Q_design": 1e6,
-			"Q_low": 0.2,
-			"Q_min": 0.1,
+			"Q_low": 0.0,
+			"Q_min": 0.2,
 			"ff_sys": "condenser:out2_system feed:in1",
 			"rf_sys": "system return:out1_condenser:in2",
 			"ff_sto": "evaporator:out1_storage feed:in1",
@@ -101,17 +101,17 @@
 	},
 	"discharge":
 	{
-		"restricted": true,
-		"name": "he_discharge",
-		"ttd_min": 5
+		"restricted": false,
+		"name": "hp_discharge",
+		"ttd_min": 3
 	},
 	"charge":
 	{
 		"restricted": true,
 		"name": "he_charge",
-		"ttd_min": 5
+		"ttd_min": 3
 	},
-	"storage_boost_order": ["hp", "plb", "eb"],
+	"storage_boost_order": ["eb"],
 	"heat_balance_only": false,
 	"max_iter": 5,
 	"heat_max_dev_rel": 0.0001

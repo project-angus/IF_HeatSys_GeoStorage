@@ -1,2 +1,4 @@
 label;P;P_set
-heat;99999.9999999919;True
+heat;199999.999999984;True
+power;0.0;False
+ti;0.0;False

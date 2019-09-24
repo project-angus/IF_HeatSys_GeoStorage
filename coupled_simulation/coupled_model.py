@@ -43,8 +43,7 @@ class CoupledModel:
             os.path.dirname(self.__gs.simulation_files()), self.__gs.simulation_files()))
         info('INTERFACE time stepping prepared')
 
-        return float(self.__input_ts.loc[self.__input_ts.time == str(self.__prop.t_start),
-                                         'temperature_feed'].values[0])
+        return 80, 35
 
     def execute(self):
         """

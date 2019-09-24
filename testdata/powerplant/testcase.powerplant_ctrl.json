@@ -58,7 +58,7 @@
 			"path": "he_charge",
 			"init_path_low_Q": "he_charge_low",
 			"Q_design": 1e6,
-			"Q_low": 0.3,
+			"Q_low": 0.25,
 			"Q_min": 0.01,
 			"ff_sys": "heat exchanger:out1_HS in:in1",
 			"rf_sys": "HS out:out1_heat exchanger:in1",

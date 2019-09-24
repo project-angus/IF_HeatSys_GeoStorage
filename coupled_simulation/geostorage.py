@@ -16,7 +16,7 @@ class GeoStorageSimulator(ABC):
     def postprocess(self):
         pass
 
-    
+
 class OgsKb1(GeoStorageSimulator):
     def __init__(self, data):
         self.__data = data
@@ -84,7 +84,7 @@ class OgsKb1(GeoStorageSimulator):
 class GeoStorage:
     def __init__(self, cd):
         info('GEOSTORAGE Reading input file .geostorage_ctr.json')
-        path = (cd.working_dir + cd.geostorage_path + cd.scenario + '.geostorage_ctrl.json')        
+        path = (cd.working_dir + cd.geostorage_path + cd.scenario + '.geostorage_ctrl.json')
         # print(path)
         self.__specification = dict()
         with open(path) as file:

@@ -51,7 +51,8 @@ class CoupledModel:
         - prepare and execute time step loop
         :return:
         """
-        T_rf_sto = self.prepare_timestepping()
+        T_DC, T_C = self.prepare_timestepping()
+        T_rf_sto_0 = {'charging': T_C, 'discharging': T_DC}
 
         for t_step in range(self.__prop.t_steps_total):
 
@@ -61,11 +62,20 @@ class CoupledModel:
 
             Q_target, T_ff_sys, T_rf_sys, p_ff_sys, p_rf_sys = self.get_timestep_data(str(current_time))
 
+            info('Target heat flow: {}'.format(Q_target))
+
+            storage_mode = 'charging' if Q_target > 0. else 'discharging'
             Q_sto, name_plant, Q_plant, P_plant, ti_plant, T_ff_sto, T_rf_sto, m_sto = \
-                self.execute_timestep(Q_target, T_ff_sys, T_rf_sys, p_ff_sys, p_rf_sys, T_rf_sto)
+                self.execute_timestep(Q_target, T_ff_sys, T_rf_sys, p_ff_sys, p_rf_sys, T_rf_sto_0[storage_mode])
+
+            T_rf_sto_0[storage_mode] = T_rf_sto
+
             # postprocess timestep
             self.evaluate_timestep(t_step, current_time, name_plant, Q_target,  Q_plant, Q_sto, P_plant, ti_plant,
                                                      T_ff_sys, T_rf_sys,T_ff_sto, T_rf_sto, m_sto)
+
+            if t_step % self.__prop.save_nth_t_step == 0:
+                self.__output_ts.to_csv(self.__prop.working_dir + self.__prop.output_timeseries_path, index=False)
 
         self.__output_ts.to_csv(self.__prop.working_dir + self.__prop.output_timeseries_path, index=False)
         print(self.__output_ts)
@@ -115,8 +125,12 @@ class CoupledModel:
             info('INTERFACE start iteration {}'.format(iter))
             try:
                 # powerplant
-                Q_sto, name_plant, Q_plant, P_plant, ti_plant, T_ff_sto, T_rf_sto, m_sto = pp.calc_interface_params(
-                    self.__pp_info, T_ff_sys, T_rf_sys, T_rf_sto, p_ff_sys, p_rf_sys, abs(Q), storage_mode, 5)
+                if abs(Q) > 1e-3:
+                    Q_sto, name_plant, P_plant, Q_plant, ti_plant, T_ff_sto, T_rf_sto, m_sto = pp.calc_interface_params(
+                        self.__pp_info, T_ff_sys, T_rf_sys, T_rf_sto, p_ff_sys, p_rf_sys, abs(Q), storage_mode, 0)
+                else:
+                    Q_sto, name_plant, P_plant, Q_plant, ti_plant, T_ff_sto, T_rf_sto, m_sto = \
+                        0, '', 0, 0, 0, 90, T_rf_sto, 0
 
                 info('POWERPLANT calculation completed')
                 # geostorage
@@ -126,19 +140,19 @@ class CoupledModel:
 
                 error = abs(T_rf_sto_geo - T_rf_sto)
                 info('INTERFACE coupling error: {}'.format(error))
-                if error < self.__prop.temperature_return_error and iter >= self.__prop.iter_min-1:
+                if error < self.__prop.temperature_return_error and iter >= self.__prop.iter_min-1 or abs(Q) < 1e-3:
                     info("INTERFACE loop converged")
                     break
                 # update
                 T_rf_sto = T_rf_sto_geo
             except:
-                Q_sto, name_plant, Q_plant, P_plant, ti_plant, T_ff_sto, T_rf_sto_geo, m_sto = \
+                Q_sto, name_plant, P_plant, Q_plant, ti_plant, T_ff_sto, T_rf_sto_geo, m_sto = \
                     None, None, None, None, None, None, None, None
                 error("INTERFACE iteration failed")
 
-        return Q_sto, name_plant, Q_plant, P_plant, ti_plant, T_ff_sto, T_rf_sto_geo, m_sto
+        return Q_sto, name_plant, P_plant, Q_plant, ti_plant, T_ff_sto, T_rf_sto_geo, m_sto
 
-    def evaluate_timestep(self, t_step, current_time, name_plant, Q_target,  Q_plant, Q_sto, P_plant, ti_plant,
+    def evaluate_timestep(self, t_step, current_time, name_plant, Q_target, Q_plant, Q_sto, P_plant, ti_plant,
                           T_ff_sys, T_rf_sys,T_ff_sto, T_rf_sto, m_sto):
         """
         - write output timeseries
@@ -160,7 +174,7 @@ class CoupledModel:
 
         try:
             os.system('rm {}/testCase0000.vtk'.format(os.path.dirname(self.__gs.simulation_files())))
-            os.system('cp {}/testCase0001.vtk {}/testCase{}.vtk'.format(os.path.dirname(self.__gs.simulation_files()), 
+            os.system('cp {}/testCase0001.vtk {}/testCase{}.vtk'.format(os.path.dirname(self.__gs.simulation_files()),
                 os.path.dirname(self.__gs.simulation_files()), '000{}'.format(t_step)))
         except:
             pass

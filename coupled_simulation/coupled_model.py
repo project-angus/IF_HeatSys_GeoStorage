@@ -33,8 +33,9 @@ class CoupledModel:
     def prepare_timestepping(self):
         """
         - copy _HEAT_TRANSPORT.IC,  _LIQUID_FLOW.IC such that
+        - initializes return temperature from storage for power plant model (takes feed-in temperture of heat network)
         pressure and temperature field are updated from primary_variables-file in time step loop
-        :return:
+        :return: initial return temperature from storage for power plants
         """
         os.system('cp {}/_HEAT_TRANSPORT.IC {}_HEAT_TRANSPORT_domain_primary_variables.txt'.format(
             os.path.dirname(self.__gs.simulation_files()), self.__gs.simulation_files()))
@@ -42,13 +43,15 @@ class CoupledModel:
             os.path.dirname(self.__gs.simulation_files()), self.__gs.simulation_files()))
         info('INTERFACE time stepping prepared')
 
+        return 80, 35
+
     def execute(self):
         """
         - prepare and execute time step loop
         :return:
         """
-        self.prepare_timestepping()
-        T_rf_sto = 80
+        T_DC, T_C = self.prepare_timestepping()
+        T_rf_sto_0 = {'charging': T_C, 'discharging': T_DC}
 
         for t_step in range(self.__prop.t_steps_total):
 
@@ -56,14 +59,22 @@ class CoupledModel:
             info('---------------------------------------------------')
             info('INTERFACE time step {} - {}'.format(t_step, current_time))
 
-
             Q_target, T_ff_sys, T_rf_sys, p_ff_sys, p_rf_sys = self.get_timestep_data(str(current_time))
 
+            info('Target heat flow: {}'.format(Q_target))
+
+            storage_mode = 'charging' if Q_target > 0. else 'discharging'
             Q_sto, name_plant, Q_plant, P_plant, ti_plant, T_ff_sto, T_rf_sto, m_sto = \
-                self.execute_timestep(Q_target, T_ff_sys, T_rf_sys, p_ff_sys, p_rf_sys, T_rf_sto)
+                self.execute_timestep(Q_target, T_ff_sys, T_rf_sys, p_ff_sys, p_rf_sys, T_rf_sto_0[storage_mode])
+
+            T_rf_sto_0[storage_mode] = T_rf_sto
+
             # postprocess timestep
             self.evaluate_timestep(t_step, current_time, name_plant, Q_target,  Q_plant, Q_sto, P_plant, ti_plant,
                                                      T_ff_sys, T_rf_sys,T_ff_sto, T_rf_sto, m_sto)
+
+            if t_step % self.__prop.save_nth_t_step == 0:
+                self.__output_ts.to_csv(self.__prop.working_dir + self.__prop.output_timeseries_path, index=False)
 
         self.__output_ts.to_csv(self.__prop.working_dir + self.__prop.output_timeseries_path, index=False)
         print(self.__output_ts)
@@ -90,10 +101,9 @@ class CoupledModel:
             Q_target, T_ff_sys, T_rf_sys, p_ff_sys, p_rf_sys = None, None, None, None, None
             error('INTERFACE time step not found in input data')
 
-
         return Q_target, T_ff_sys, T_rf_sys, p_ff_sys, p_rf_sys
 
-    def execute_timestep(self, Q_target, T_ff_sys, T_rf_sys, p_ff_sys, p_rf_sys, T_rf_sto_0):
+    def execute_timestep(self, Q_target, T_ff_sys, T_rf_sys, p_ff_sys, p_rf_sys, T_rf_sto):
         """
         - contains interation loop
         - imitialize T_rf_sto with T_ff_sys
@@ -102,11 +112,11 @@ class CoupledModel:
         :param T_rf_sys: (float) temperature from heat network
         :param p_ff_sys: (float) pressure to heat network
         :param p_rf_sys: (float) pressure from heat network
+        :param T_rf_sto: (float) Initial return temperature from geostorage
         :return: calculation resulsts (floats) and name_plant (string)
         """
         # initialization
         storage_mode = 'charging' if Q_target > 0. else 'discharging'  # TO_DO: case Q_target = 0.
-        T_rf_sto = T_rf_sto_0
         Q = Q_target
         # iteration
         for iter in range(self.__prop.iter_max):
@@ -114,18 +124,22 @@ class CoupledModel:
             info('INTERFACE start iteration {}'.format(iter))
             try:
                 # powerplant
-                Q_sto, name_plant, P_plant, Q_plant, ti_plant, T_ff_sto, T_rf_sto, m_sto = pp.calc_interface_params(
-                    self.__pp_info, T_ff_sys, T_rf_sys, T_rf_sto, p_ff_sys, p_rf_sys, abs(Q), storage_mode, 0)
+                if abs(Q) > 1e-3:
+                    Q_sto, name_plant, P_plant, Q_plant, ti_plant, T_ff_sto, T_rf_sto, m_sto = pp.calc_interface_params(
+                        self.__pp_info, T_ff_sys, T_rf_sys, T_rf_sto, p_ff_sys, p_rf_sys, abs(Q), storage_mode, 0)
+                else:
+                    Q_sto, name_plant, P_plant, Q_plant, ti_plant, T_ff_sto, T_rf_sto, m_sto = \
+                        0, '', 0, 0, 0, 90, T_rf_sto, 0
 
                 info('POWERPLANT calculation completed')
                 # geostorage
                 T_rf_sto_geo = self.__gs.run_storage_simulation(T_ff_sto, m_sto, storage_mode)
                 # evaluate
-                info('T_rf_sto_geo: {}'.format(T_rf_sto_geo))
+                info('Return temperature from geostorage: {}'.format(T_rf_sto_geo))
 
                 error = abs(T_rf_sto_geo - T_rf_sto)
                 info('INTERFACE coupling error: {}'.format(error))
-                if error < self.__prop.temperature_return_error and iter >= self.__prop.iter_min-1:
+                if error < self.__prop.temperature_return_error and iter >= self.__prop.iter_min-1 or abs(Q) < 1e-3:
                     info("INTERFACE loop converged")
                     break
                 # update
@@ -156,5 +170,12 @@ class CoupledModel:
         :param m_sto: (float) mass flow rate through heat exchanger at geostorage side
         :return:
         """
+
+        try:
+            os.system('rm {}/testCase0000.vtk'.format(os.path.dirname(self.__gs.simulation_files())))
+            os.system('cp {}/testCase0001.vtk {}/testCase{}.vtk'.format(os.path.dirname(self.__gs.simulation_files()),
+                os.path.dirname(self.__gs.simulation_files()), '000{}'.format(t_step)))
+        except:
+            pass
         self.__output_ts.loc[t_step] = np.array([current_time, name_plant, Q_target, Q_plant, Q_sto, P_plant, ti_plant,
                                                  T_ff_sys, T_rf_sys, T_ff_sto, T_rf_sto, m_sto])

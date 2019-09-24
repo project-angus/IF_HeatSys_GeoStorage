@@ -16,7 +16,7 @@ class GeoStorageSimulator(ABC):
     def postprocess(self):
         pass
 
-    
+
 class OgsKb1(GeoStorageSimulator):
     def __init__(self, data):
         self.__data = data
@@ -39,15 +39,15 @@ class OgsKb1(GeoStorageSimulator):
         if storage_mode == 'charging':
             # ST
             os.system("sed 's/$WARM/{0}/g' {1}/_{2}.st > {1}/{2}.st".format(m_sto / density, directory, basename))
-            os.system("sed -i 's/$COLD/-{}/g' {}/{}.st".format(-m_sto / density, directory, basename))
+            os.system("sed -i 's/$COLD/{}/g' {}/{}.st".format(-m_sto / density, directory, basename))
             # BC
-            os.system("sed 's/$TYPE/WARM/g' {0}/_{2}.bc > {0}/{2}.bc".format(directory, basename))
+            os.system("sed 's/$TYPE/WARM/g' {0}/_{1}.bc > {0}/{1}.bc".format(directory, basename))
             os.system("sed -i 's/$VALUE/{}/g' {}/{}.bc".format(T_ff_sto, directory, basename))
 
         elif storage_mode == 'discharging':
             # ST
-            os.system("sed 's/$WARM/-{0}/g' {1}/_{2}.st > {1}/{2}.st".format(m_sto / density, directory, basename))
-            os.system("sed -i 's/$COLD/{}/g' {}/{}.st".format(-m_sto / density, directory, basename))
+            os.system("sed 's/$WARM/{0}/g' {1}/_{2}.st > {1}/{2}.st".format(-m_sto / density, directory, basename))
+            os.system("sed -i 's/$COLD/{}/g' {}/{}.st".format(m_sto / density, directory, basename))
             # BC
             os.system("sed 's/$TYPE/COLD/g' {0}/_{1}.bc > {0}/{1}.bc".format(directory, basename))
             os.system("sed -i 's/$VALUE/{}/g' {}/{}.bc".format(T_ff_sto, directory, basename))
@@ -84,7 +84,7 @@ class OgsKb1(GeoStorageSimulator):
 class GeoStorage:
     def __init__(self, cd):
         info('GEOSTORAGE Reading input file .geostorage_ctr.json')
-        path = (cd.working_dir + cd.geostorage_path + cd.scenario + '.geostorage_ctrl.json')        
+        path = (cd.working_dir + cd.geostorage_path + cd.scenario + '.geostorage_ctrl.json')
         # print(path)
         self.__specification = dict()
         with open(path) as file:

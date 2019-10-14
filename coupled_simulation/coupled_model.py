@@ -28,7 +28,7 @@ class CoupledModel:
         self.__output_ts = DataFrame(index=np.arange(0, self.__prop.t_steps_total),
                                         columns=['time', 'plant', 'Q_target', 'Q_plant', 'Q_sto',
                                                  'P_plant', 'ti_actual',
-                                                 'T_ff_sys', 'T_rf_sys', 'T_ff_sto', 'T_rf_sto', 'm_sto'])
+                                                 'T_ff_sys', 'T_rf_sys', 'T_ff_sto', 'T_rf_sto', 'm_sto', 'pp_err'])
 
     def prepare_timestepping(self):
         """
@@ -64,14 +64,14 @@ class CoupledModel:
             info('Target heat flow: {}'.format(Q_target))
 
             storage_mode = 'charging' if Q_target > 0. else 'discharging'
-            Q_sto, name_plant, Q_plant, P_plant, ti_plant, T_ff_sto, T_rf_sto, m_sto = \
+            Q_sto, name_plant, Q_plant, P_plant, ti_plant, T_ff_sto, T_rf_sto, m_sto, pp_err = \
                 self.execute_timestep(Q_target, T_ff_sys, T_rf_sys, p_ff_sys, p_rf_sys, T_rf_sto_0[storage_mode])
 
             T_rf_sto_0[storage_mode] = T_rf_sto
 
             # postprocess timestep
             self.evaluate_timestep(t_step, current_time, name_plant, Q_target,  Q_plant, Q_sto, P_plant, ti_plant,
-                                                     T_ff_sys, T_rf_sys,T_ff_sto, T_rf_sto, m_sto)
+                                                     T_ff_sys, T_rf_sys,T_ff_sto, T_rf_sto, m_sto, pp_err)
 
             if t_step % self.__prop.save_nth_t_step == 0:
                 self.__output_ts.to_csv(self.__prop.working_dir + self.__prop.output_timeseries_path, index=False)
@@ -125,11 +125,11 @@ class CoupledModel:
             try:
                 # powerplant
                 if abs(Q) > 1e-3:
-                    Q_sto, name_plant, P_plant, Q_plant, ti_plant, T_ff_sto, T_rf_sto, m_sto = pp.calc_interface_params(
+                    Q_sto, name_plant, P_plant, Q_plant, ti_plant, T_ff_sto, T_rf_sto, m_sto, pp_err = pp.calc_interface_params(
                         self.__pp_info, T_ff_sys, T_rf_sys, T_rf_sto, p_ff_sys, p_rf_sys, abs(Q), storage_mode, 0)
                 else:
-                    Q_sto, name_plant, P_plant, Q_plant, ti_plant, T_ff_sto, T_rf_sto, m_sto = \
-                        0, '', 0, 0, 0, 90, T_rf_sto, 0
+                    Q_sto, name_plant, P_plant, Q_plant, ti_plant, T_ff_sto, T_rf_sto, m_sto, pp_err = \
+                        0, '', 0, 0, 0, 90, T_rf_sto, 0, False
 
                 info('POWERPLANT calculation completed')
                 # geostorage
@@ -145,14 +145,14 @@ class CoupledModel:
                 # update
                 T_rf_sto = T_rf_sto_geo
             except:
-                Q_sto, name_plant, P_plant, Q_plant, ti_plant, T_ff_sto, T_rf_sto_geo, m_sto = \
-                    None, None, None, None, None, None, None, None
+                Q_sto, name_plant, P_plant, Q_plant, ti_plant, T_ff_sto, T_rf_sto_geo, m_sto, pp_err = \
+                    None, None, None, None, None, None, None, None, False
                 error("INTERFACE iteration failed")
 
-        return Q_sto, name_plant, P_plant, Q_plant, ti_plant, T_ff_sto, T_rf_sto_geo, m_sto
+        return Q_sto, name_plant, P_plant, Q_plant, ti_plant, T_ff_sto, T_rf_sto_geo, m_sto, pp_err
 
     def evaluate_timestep(self, t_step, current_time, name_plant, Q_target, Q_plant, Q_sto, P_plant, ti_plant,
-                          T_ff_sys, T_rf_sys,T_ff_sto, T_rf_sto, m_sto):
+                          T_ff_sys, T_rf_sys,T_ff_sto, T_rf_sto, m_sto, pp_err):
         """
         - write output timeseries
         :param t_step: (int) current time step
@@ -168,6 +168,7 @@ class CoupledModel:
         :param T_ff_sto: (float) feed flow temperature to geostorage
         :param T_rf_sto: (float) return flow temperature from geostorage
         :param m_sto: (float) mass flow rate through heat exchanger at geostorage side
+        :param pp_err: (bool) indicates whether an error occurred in power plant simulation
         :return:
         """
 
@@ -178,4 +179,4 @@ class CoupledModel:
         except:
             pass
         self.__output_ts.loc[t_step] = np.array([current_time, name_plant, Q_target, Q_plant, Q_sto, P_plant, ti_plant,
-                                                 T_ff_sys, T_rf_sys, T_ff_sto, T_rf_sto, m_sto])
+                                                 T_ff_sys, T_rf_sys, T_ff_sto, T_rf_sto, m_sto, pp_err])

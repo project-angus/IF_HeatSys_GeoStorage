@@ -154,6 +154,9 @@ def calc_interface_params(
 
     m_sto : float
         Mass flow at storage side of heat exchanger.
+
+    err : bool
+        Indicates whether an error occurred in calculation.
     """
 
     if mode == 'charging':
@@ -168,27 +171,29 @@ def calc_interface_params(
         if Q < Q_min:
             # storage interface plant operation impossible
             msg = ('Target heat extraction rate of ' + str(round(Q, 0)) + ' W '
-                   'below minimum possible heat extraction rate of ' +
+                   'below minimum possible heat extraction rate ofF ' +
                    str(round(Q_min, 0)) + ' W. '
                    'Interface operation impossible.')
             logging.warning(msg)
             T_ff_sto = T_rf_sto
-            return 0, None, 0, 0, 0, T_ff_sto, T_rf_sto, 0
+            return 0, None, 0, 0, 0, T_ff_sto, T_rf_sto, 0, False
 
         else:
 
             # temperature restriction for storage feed flow temperature
             ttd = ppinfo['charge']['ttd_min']
+            T_ff_sto_max = ppinfo['charge']['T_max']
             # system feed flow temperature as temperature at interface
             # inlet
             T = T_ff_sys
-            IF_data = sim_IF_charge(plant, T, T_rf_sto, p_rf, Q, ttd)
+            IF_data = sim_IF_charge(plant, T, T_rf_sto, p_rf, Q, ttd, T_ff_sto_max)
 
         Q_IF = IF_data[1]
         T_ff_sto = IF_data[5]
         m_sto = IF_data[7]
+        err = IF_data[9]
 
-        return Q_IF, None, 0, 0, 0, T_ff_sto, T_rf_sto, m_sto
+        return Q_IF, None, 0, 0, 0, T_ff_sto, T_rf_sto, m_sto, err
 
     elif mode == 'discharging':
 
@@ -215,7 +220,7 @@ def calc_interface_params(
                    'Interface operation impossible.')
             logging.warning(msg)
             T_ff_sto = T_rf_sto
-            IF_data = Q, 0, 0, 0, T_rf_sys, T_ff_sto, T_rf_sto, 0, p_rf
+            IF_data = Q, 0, 0, 0, T_rf_sys, T_ff_sto, T_rf_sto, 0, p_rf, False
 
         else:
 
@@ -242,6 +247,7 @@ def calc_interface_params(
         T_rf_sto = IF_data[6]
         m_sto = IF_data[7]
         p_sys = IF_data[8]
+        err = IF_data[9]
 
         if abs(IF_data[0]) < 1e-1:
             # heat flow target delivered by the interface plant
@@ -253,7 +259,7 @@ def calc_interface_params(
                    'temperature at ' + str(round(T_ff_sto, 1)) + ' C.')
             logging.debug(msg)
 
-            return Q_IF, None, P_IF, 0, ti_IF, T_ff_sto, T_rf_sto, m_sto
+            return Q_IF, None, P_IF, 0, ti_IF, T_ff_sto, T_rf_sto, m_sto, err
 
         else:
             # heat flow target not met by the interface plant
@@ -267,7 +273,7 @@ def calc_interface_params(
 
         if ppinfo['heat_balance_only']:
             # return storage parameters only
-            return Q_IF, None, 0, 0, 0, T_ff_sto, T_rf_sto, m_sto
+            return Q_IF, None, 0, 0, 0, T_ff_sto, T_rf_sto, m_sto, err
 
         else:
             # calculate power plant operation to replace missing heat
@@ -308,13 +314,13 @@ def calc_interface_params(
                         logging.debug(msg)
 
                         return (Q_IF, sto_booster, P_plant, Q_plant,
-                                ti_plant, T_ff_sto, T_rf_sto, m_sto)
+                                ti_plant, T_ff_sto, T_rf_sto, m_sto, err)
 
             # no power plant operation possible
             msg = ('No power plant operation possible, heating system target '
                    'feed flow temperature could not be met.')
             logging.error(msg)
-            return Q_IF, None, 0, 0, 0, T_ff_sto, T_rf_sto, m_sto
+            return Q_IF, None, 0, 0, 0, T_ff_sto, T_rf_sto, m_sto, err
 
     else:
         msg = ('Mode for interface parameter calculation at '
@@ -489,6 +495,9 @@ def sim_IF_discharge_ttd(
 
     p_sys : float
         Heating system feed flow pressure.
+
+    err : bool
+        Indicates whether an error occurred in calculation.
     """
     if T_rf_sto < T_rf_sys + ttd:
         # heat extraction from storage impossible, maxium temperature level
@@ -558,7 +567,11 @@ def sim_IF_discharge_ttd(
 
     Q_res = Q - Q_IF
 
-    return Q_res, Q_IF, P_IF, ti_IF, T_sys, T_ff_sto, T_rf_sto, m_sto, p_sys
+    err = False
+    if model.lin_dep or model.res[-1] > 1e-3:
+        err = True
+
+    return Q_res, Q_IF, P_IF, ti_IF, T_sys, T_ff_sto, T_rf_sto, m_sto, p_sys, err
 
 
 def sim_IF_discharge(plant, T_ff_sys, T_rf_sys, T_rf_sto, p_rf, Q):
@@ -614,8 +627,12 @@ def sim_IF_discharge(plant, T_ff_sys, T_rf_sys, T_rf_sto, p_rf, Q):
 
     p_sys : float
         Heating system feed flow pressure.
+
+    err : bool
+        Indicates whether an error occurred in calculation.
     """
     model = plant.instance
+
     # specify system parameters
     model.imp_busses[plant.model_data['heat_bus']].set_attr(P=np.nan)
     model.imp_conns[plant.model_data['rf_sys']].set_attr(T=T_rf_sys, p=p_rf)
@@ -638,7 +655,11 @@ def sim_IF_discharge(plant, T_ff_sys, T_rf_sys, T_rf_sto, p_rf, Q):
             if model.lin_dep or model.res[-1] > 1e-3:
                 raise hlp.TESPyNetworkError
         except (hlp.TESPyNetworkError, ValueError):
-            model.solve('offdesign', design_path=design, init_path=design)
+            if T_ff_sys > plant.model_data['T_sys_hi']:
+                init = plant.wdir + plant.model_data['init_path_sys_hi']
+                model.solve('offdesign', design_path=design, init_path=init)
+            else:
+                model.solve('offdesign', design_path=design, init_path=design)
 
     # storage interface temperatures
     T_sys = model.imp_conns[plant.model_data['ff_sys']].T.val
@@ -655,10 +676,14 @@ def sim_IF_discharge(plant, T_ff_sys, T_rf_sys, T_rf_sto, p_rf, Q):
     ti_IF = model.imp_busses[plant.model_data['ti_bus']].P.val
     Q_res = Q - Q_IF
 
-    return Q_res, Q_IF, P_IF, ti_IF, T_sys, T_ff_sto, T_rf_sto, m_sto, p_sys
+    err = False
+    if model.lin_dep or model.res[-1] > 1e-3:
+        err = True
+
+    return Q_res, Q_IF, P_IF, ti_IF, T_sys, T_ff_sto, T_rf_sto, m_sto, p_sys, err
 
 
-def sim_IF_charge(plant, T_rf_sys, T_rf_sto, p_rf, Q, ttd):
+def sim_IF_charge(plant, T_rf_sys, T_rf_sto, p_rf, Q, ttd, T_ff_sto_max):
     """
     Calculate the operation of the interface plant for storage charging.
 
@@ -680,7 +705,10 @@ def sim_IF_charge(plant, T_rf_sys, T_rf_sto, p_rf, Q, ttd):
         Value of heat flow.
 
     ttd : float
-        Terminal temperature difference.
+        Minimum terminal temperature difference.
+
+    T_ff_sto_max : float
+        Maximum temperature to storage.
 
     Returns
     -------
@@ -710,6 +738,9 @@ def sim_IF_charge(plant, T_rf_sys, T_rf_sto, p_rf, Q, ttd):
 
     p_sys : float
         Heating system feed flow pressure.
+
+    err : bool
+        Indicates whether an error occurred in calculation.
     """
     model = plant.instance
     model.set_attr(m_range=[0, 300])
@@ -718,7 +749,15 @@ def sim_IF_charge(plant, T_rf_sys, T_rf_sto, p_rf, Q, ttd):
     model.imp_busses[plant.model_data['heat_bus']].set_attr(P=Q)
     model.imp_conns[plant.model_data['rf_sys']].set_attr(T=T_rf_sys, p=p_rf)
     model.imp_conns[plant.model_data['rf_sto']].set_attr(T=T_rf_sto)
-    model.imp_conns[plant.model_data['ff_sto']].set_attr(T=T_rf_sys - ttd)
+
+    if T_ff_sto_max < T_rf_sys - ttd:
+        T_ff_sto = T_ff_sto_max
+    else:
+        T_ff_sto = T_rf_sys - ttd
+
+    print(T_ff_sto, T_rf_sto, T_rf_sys)
+
+    model.imp_conns[plant.model_data['ff_sto']].set_attr(T=T_ff_sto)
     model.imp_conns[plant.model_data['ff_sys']].set_attr(m=np.nan, T=np.nan, design=[])
 
     # solving
@@ -728,7 +767,17 @@ def sim_IF_charge(plant, T_rf_sys, T_rf_sto, p_rf, Q, ttd):
         init = plant.wdir + plant.model_data['init_path_low_Q']
         model.solve('offdesign', design_path=design, init_path=init)
     else:
-        model.solve('offdesign', design_path=design, init_path=design)
+        try:
+            model.solve('offdesign', design_path=design)
+        except (ValueError):
+            if T_rf_sto < 30:
+                init = plant.wdir + plant.model_data['init_path_sto_low']
+                model.solve('offdesign', design_path=design, init_path=init)
+            elif T_rf_sys > 95:
+                init = plant.wdir + plant.model_data['init_path_sys_hi']
+                model.solve('offdesign', design_path=design, init_path=init)
+            else:
+                model.solve('offdesign', design_path=design, init_path=design)
 
     # storage interface temperatures
     T_sys = model.imp_conns[plant.model_data['ff_sys']].T.val
@@ -745,4 +794,8 @@ def sim_IF_charge(plant, T_rf_sys, T_rf_sto, p_rf, Q, ttd):
     ti_IF = model.imp_busses[plant.model_data['ti_bus']].P.val
     Q_res = Q - Q_IF
 
-    return Q_res, Q_IF, P_IF, ti_IF, T_sys, T_ff_sto, T_rf_sto, m_sto, p_sys
+    err = False
+    if model.lin_dep or model.res[-1] > 1e-3:
+        err = True
+
+    return Q_res, Q_IF, P_IF, ti_IF, T_sys, T_ff_sto, T_rf_sto, m_sto, p_sys, err

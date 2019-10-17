@@ -2,6 +2,8 @@
 	"simulator_name": "ogs_kb1",
 	"simulator_file": "/home/jens/git/IF_HeatSys_GeoStorage/testdata/geostorage/input/ogs_OGS_FEM",
 	"simulation_files": "/home/jens/git/IF_HeatSys_GeoStorage/testdata/geostorage/input/testCase",
-	"well_names": ["WARM", "COLD"]
+	"well_names": ["WARM", "COLD"],
+	"breakpoints": [10, 20, 30],
+	"vtk_output": [5, 15, 20, 30, 40]
 }
 

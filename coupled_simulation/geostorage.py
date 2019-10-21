@@ -110,6 +110,9 @@ class GeoStorage:
     def vtk_output(self):
         return self.__specification['vtk_output']
 
+    def output_points(self):
+        return self.__specification['output_points']
+
     def run_storage_simulation(self, T_ff_sto, m_sto, storage_mode):
         """
 

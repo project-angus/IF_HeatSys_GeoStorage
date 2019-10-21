@@ -188,6 +188,19 @@ class CoupledModel:
                     self.__gs.simulation_files(), os.path.dirname(self.__gs.simulation_files()), t_step))
                 os.system('cp {}_LIQUID_FLOW_domain_primary_variables.txt {}/LIQUID_FLOW_{}.IC'.format(
                     self.__gs.simulation_files(), os.path.dirname(self.__gs.simulation_files()), t_step))
+
+            for pnt in self.__gs.output_points():
+                info('{} {}'.format(pnt, t_step))
+                filename = '{}_time_{}.tec'.format(self.__gs.simulation_files(), pnt)
+                file = open(filename, 'r')
+                for line in file:
+                    w = line
+                file.close()
+
+                argument = 'w' if t_step == 0 else 'a'
+                file = open('{}_point_{}.txt'.format(self.__gs.simulation_files(), pnt), argument)
+                file.write('{}\t{}\n'.format(t_step * self.__prop.t_step_length, w.split()[-1]))
+                file.close()
         except:
             pass
         self.__output_ts.loc[t_step] = np.array([current_time, name_plant, Q_target, Q_plant, Q_sto, P_plant, ti_plant,

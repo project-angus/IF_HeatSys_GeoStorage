@@ -20,6 +20,7 @@ class GeoStorageSimulator(ABC):
 class OgsKb1(GeoStorageSimulator):
     def __init__(self, data):
         self.__data = data
+        print(data)
 
     def preprocess(self, T_ff_sto, m_sto, storage_mode):
         """
@@ -76,6 +77,7 @@ class OgsKb1(GeoStorageSimulator):
             with open('{}/testCase_time_{}.tec'.format(directory, well)) as file:
                 line = file.readlines()[4]
                 t_rf_sto = float(line.split()[1])
+
         except:
             t_rf_sto = None
         return t_rf_sto
@@ -102,6 +104,15 @@ class GeoStorage:
     def simulation_files(self):
         return self.__specification['simulation_files']
 
+    def breakpoints(self):
+        return self.__specification['breakpoints']
+
+    def vtk_output(self):
+        return self.__specification['vtk_output']
+
+    def output_points(self):
+        return self.__specification['output_points']
+
     def run_storage_simulation(self, T_ff_sto, m_sto, storage_mode):
         """
 
@@ -112,6 +123,7 @@ class GeoStorage:
         """
         self.__simulator.preprocess(T_ff_sto, m_sto, storage_mode)
         self.__simulator.run()
+
         T_rf_sto = self.__simulator.postprocess(storage_mode)
 
         return T_rf_sto

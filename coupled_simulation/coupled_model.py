@@ -65,7 +65,7 @@ class CoupledModel:
 
             storage_mode = 'charging' if Q_target > 0. else 'discharging'
             Q_sto, name_plant, Q_plant, P_plant, ti_plant, T_ff_sto, T_rf_sto, m_sto, pp_err = \
-                self.execute_timestep(Q_target, T_ff_sys, T_rf_sys, p_ff_sys, p_rf_sys, T_rf_sto_0[storage_mode])
+                self.execute_timestep(t_step, Q_target, T_ff_sys, T_rf_sys, p_ff_sys, p_rf_sys, T_rf_sto_0[storage_mode])
 
             T_rf_sto_0[storage_mode] = T_rf_sto
 
@@ -103,7 +103,7 @@ class CoupledModel:
 
         return Q_target, T_ff_sys, T_rf_sys, p_ff_sys, p_rf_sys
 
-    def execute_timestep(self, Q_target, T_ff_sys, T_rf_sys, p_ff_sys, p_rf_sys, T_rf_sto):
+    def execute_timestep(self, t_step, Q_target, T_ff_sys, T_rf_sys, p_ff_sys, p_rf_sys, T_rf_sto):
         """
         - contains interation loop
         - imitialize T_rf_sto with T_ff_sys
@@ -174,8 +174,33 @@ class CoupledModel:
 
         try:
             os.system('rm {}/testCase0000.vtk'.format(os.path.dirname(self.__gs.simulation_files())))
-            os.system('cp {}/testCase0001.vtk {}/testCase{}.vtk'.format(os.path.dirname(self.__gs.simulation_files()),
-                os.path.dirname(self.__gs.simulation_files()), '000{}'.format(t_step)))
+
+            if t_step in self.__gs.vtk_output():
+                info('Store vtk')
+                os.system('cp {}/testCase0001.vtk {}/testCase{}.vtk'.format(os.path.dirname(self.__gs.simulation_files()),
+                    os.path.dirname(self.__gs.simulation_files()), '000{}'.format(t_step)[-4:]))
+            else:
+                os.system('rm {}/testCase0001.vtk'.format(os.path.dirname(self.__gs.simulation_files())))
+
+            if t_step in self.__gs.breakpoints():
+                info('BREAKPOINT - store geostorage results')
+                os.system('cp {}_HEAT_TRANSPORT_domain_primary_variables.txt {}/HEAT_TRANSPORT_{}.IC'.format(
+                    self.__gs.simulation_files(), os.path.dirname(self.__gs.simulation_files()), t_step))
+                os.system('cp {}_LIQUID_FLOW_domain_primary_variables.txt {}/LIQUID_FLOW_{}.IC'.format(
+                    self.__gs.simulation_files(), os.path.dirname(self.__gs.simulation_files()), t_step))
+
+            for pnt in self.__gs.output_points():
+                info('{} {}'.format(pnt, t_step))
+                filename = '{}_time_{}.tec'.format(self.__gs.simulation_files(), pnt)
+                file = open(filename, 'r')
+                for line in file:
+                    w = line
+                file.close()
+
+                argument = 'w' if t_step == 0 else 'a'
+                file = open('{}_point_{}.txt'.format(self.__gs.simulation_files(), pnt), argument)
+                file.write('{}\t{}\n'.format(t_step * self.__prop.t_step_length, w.split()[-1]))
+                file.close()
         except:
             pass
         self.__output_ts.loc[t_step] = np.array([current_time, name_plant, Q_target, Q_plant, Q_sto, P_plant, ti_plant,

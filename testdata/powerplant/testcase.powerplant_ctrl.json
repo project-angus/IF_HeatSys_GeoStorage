@@ -93,11 +93,13 @@
 			"T_sys_hi": 115,
 			"Q_design": 1e6,
 			"Q_low": 0.0,
-			"Q_min": 0.2,
+			"Q_min": 0.3,
 			"ff_sys": "condenser:out2_system feed:in1",
 			"rf_sys": "system return:out1_condenser:in2",
 			"ff_sto": "evaporator:out1_storage feed:in1",
 			"rf_sto": "storage return:out1_superheater:in1",
+			"limiting_mass_flow": "superheater:out2_compressor 1:in1",
+			"m_max": 1.1,
 			"heat_bus": "heat",
 			"power_bus": "power",
 			"ti_bus": "ti"
@@ -117,7 +119,7 @@
 		"T_max": 90
 	},
 	"storage_boost_order": ["eb"],
-	"heat_balance_only": false,
+	"heat_balance_only": true,
 	"max_iter": 5,
 	"heat_max_dev_rel": 0.0001
 }

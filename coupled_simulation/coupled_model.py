@@ -16,6 +16,7 @@ class CoupledModel:
         - reads input timeseries
         :param path: (string) path to *.main_ctrl.json
         """
+        # print("PATH: {}".format(path[0]))
         self.__prop = Properties(path=path[0])
         self.__gs = GeoStorage(self.__prop)
         self.__pp_info = pp.load_models(self.__prop)
@@ -24,7 +25,6 @@ class CoupledModel:
         self.__input_ts = read_csv(self.__prop.working_dir + self.__prop.input_timeseries_file,
                                       delimiter=',', decimal='.')
         info('INTERFACE Input time series read')
-
         self.__output_ts = DataFrame(index=np.arange(0, self.__prop.t_steps_total),
                                         columns=['time', 'plant', 'Q_target', 'Q_plant', 'Q_sto',
                                                  'P_plant', 'ti_actual',
@@ -37,10 +37,15 @@ class CoupledModel:
         pressure and temperature field are updated from primary_variables-file in time step loop
         :return: initial return temperature from storage for power plants
         """
-        os.system('cp {}/_HEAT_TRANSPORT.IC {}_HEAT_TRANSPORT_domain_primary_variables.txt'.format(
-            os.path.dirname(self.__gs.simulation_files()), self.__gs.simulation_files()))
-        os.system('cp {}/_LIQUID_FLOW.IC {}_LIQUID_FLOW_domain_primary_variables.txt'.format(
-            os.path.dirname(self.__gs.simulation_files()), self.__gs.simulation_files()))
+        try:
+            os.system('cp {}/_HEAT_TRANSPORT.IC {}_HEAT_TRANSPORT_domain_primary_variables.txt'.format(
+                os.path.dirname(self.__gs.simulation_files()), self.__gs.simulation_files()))
+            if self.__gs.storage_type() == 'ATES':
+                os.system('cp {}/_LIQUID_FLOW.IC {}_LIQUID_FLOW_domain_primary_variables.txt'.format(
+                    os.path.dirname(self.__gs.simulation_files()), self.__gs.simulation_files()))
+        except:
+            pass
+
         info('INTERFACE time stepping prepared')
 
         return 80, 35
@@ -93,10 +98,11 @@ class CoupledModel:
             p_ff_sys = float(self.__input_ts.loc[self.__input_ts.time == current_time, 'pressure_feed'].values[0])
             p_rf_sys = float(self.__input_ts.loc[self.__input_ts.time == current_time, 'pressure_return'].values[0])
 
-            os.system('cp {}_HEAT_TRANSPORT_domain_primary_variables.txt {}/HEAT_TRANSPORT.IC'.format(
+            os.system('mv {}_HEAT_TRANSPORT_domain_primary_variables.txt {}/HEAT_TRANSPORT.IC'.format(
                 self.__gs.simulation_files(), os.path.dirname(self.__gs.simulation_files())))
-            os.system('cp {}_LIQUID_FLOW_domain_primary_variables.txt {}/LIQUID_FLOW.IC'.format(
-                self.__gs.simulation_files(), os.path.dirname(self.__gs.simulation_files())))
+            if self.__gs.storage_type() == 'ATES':
+                os.system('mv {}_LIQUID_FLOW_domain_primary_variables.txt {}/LIQUID_FLOW.IC'.format(
+                    self.__gs.simulation_files(), os.path.dirname(self.__gs.simulation_files())))
         except KeyError:
             Q_target, T_ff_sys, T_rf_sys, p_ff_sys, p_rf_sys = None, None, None, None, None
             error('INTERFACE time step not found in input data')
@@ -135,7 +141,7 @@ class CoupledModel:
                 # geostorage
                 T_rf_sto_geo = self.__gs.run_storage_simulation(T_ff_sto, m_sto, storage_mode)
                 # evaluate
-                info('Return temperature from geostorage: {}'.format(T_rf_sto_geo))
+                info('GEOSTORAGE return temperature: {}'.format(T_rf_sto_geo))
 
                 error = abs(T_rf_sto_geo - T_rf_sto)
                 info('INTERFACE coupling error: {}'.format(error))
@@ -186,8 +192,9 @@ class CoupledModel:
                 info('BREAKPOINT - store geostorage results')
                 os.system('cp {}_HEAT_TRANSPORT_domain_primary_variables.txt {}/HEAT_TRANSPORT_{}.IC'.format(
                     self.__gs.simulation_files(), os.path.dirname(self.__gs.simulation_files()), t_step))
-                os.system('cp {}_LIQUID_FLOW_domain_primary_variables.txt {}/LIQUID_FLOW_{}.IC'.format(
-                    self.__gs.simulation_files(), os.path.dirname(self.__gs.simulation_files()), t_step))
+                if self.__gs.storage_type() == 'ATES':
+                    os.system('cp {}_LIQUID_FLOW_domain_primary_variables.txt {}/LIQUID_FLOW_{}.IC'.format(
+                        self.__gs.simulation_files(), os.path.dirname(self.__gs.simulation_files()), t_step))
 
             for pnt in self.__gs.output_points():
                 info('{} {}'.format(pnt, t_step))

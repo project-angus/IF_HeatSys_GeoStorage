@@ -273,7 +273,7 @@ def calc_interface_params(
 
         if ppinfo['heat_balance_only']:
             # return storage parameters only
-            return Q_IF, None, 0, 0, 0, T_ff_sto, T_rf_sto, m_sto, err
+            return Q_IF, None, P_IF, 0, ti_IF, T_ff_sto, T_rf_sto, m_sto, err
 
         else:
             # calculate power plant operation to replace missing heat
@@ -297,7 +297,7 @@ def calc_interface_params(
                                ' W, relative deviation of actual heat flow to '
                                'target is too high: ' +
                                str(round(Q_diff / Q, 4)) + '.')
-                        logging.debug(msg)
+                        logging.info(msg)
                         it += 1
                         p_ff = plant.instance.imp_conns[
                                 plant.model_data['ff_sys']].p.val
@@ -661,6 +661,19 @@ def sim_IF_discharge(plant, T_ff_sys, T_rf_sys, T_rf_sto, p_rf, Q):
             else:
                 model.solve('offdesign', design_path=design, init_path=design)
 
+    conn = model.imp_conns[plant.model_data['limiting_mass_flow']]
+    m_max = conn.m.design * plant.model_data['m_max']
+    m = conn.m.val_SI
+    if m > m_max:
+        model.imp_busses[plant.model_data['heat_bus']].set_attr(P=np.nan)
+        conn.set_attr(m=m_max)
+        model.solve('offdesign', design_path=design)
+        msg = ('Limiting heat flow due to mass flow restriction in '
+               'extraction plant: mass flow: ' + str(round(m, 2)) +
+               'kg/s; maximum mass flow: ' + str(round(m_max, 2)) + 'kg/s.')
+        logging.warning(msg)
+
+    conn.set_attr(m=np.nan)
     # storage interface temperatures
     T_sys = model.imp_conns[plant.model_data['ff_sys']].T.val
     T_ff_sto = model.imp_conns[plant.model_data['ff_sto']].T.val
@@ -755,8 +768,6 @@ def sim_IF_charge(plant, T_rf_sys, T_rf_sto, p_rf, Q, ttd, T_ff_sto_max):
     else:
         T_ff_sto = T_rf_sys - ttd
 
-    print(T_ff_sto, T_rf_sto, T_rf_sys)
-
     model.imp_conns[plant.model_data['ff_sto']].set_attr(T=T_ff_sto)
     model.imp_conns[plant.model_data['ff_sys']].set_attr(m=np.nan, T=np.nan, design=[])
 
@@ -765,11 +776,14 @@ def sim_IF_charge(plant, T_rf_sys, T_rf_sto, p_rf, Q, ttd, T_ff_sto_max):
     if Q < plant.model_data['Q_design'] * plant.model_data['Q_low']:
         # initialise low heat transfer cases with init_path_low_Q
         init = plant.wdir + plant.model_data['init_path_low_Q']
-        model.solve('offdesign', design_path=design, init_path=init)
+        try:
+            model.solve('offdesign', design_path=design, init_path=init)
+        except ValueError:
+            model.solve('offdesign', design_path=design)
     else:
         try:
             model.solve('offdesign', design_path=design)
-        except (ValueError):
+        except ValueError:
             if T_rf_sto < 30:
                 init = plant.wdir + plant.model_data['init_path_sto_low']
                 model.solve('offdesign', design_path=design, init_path=init)

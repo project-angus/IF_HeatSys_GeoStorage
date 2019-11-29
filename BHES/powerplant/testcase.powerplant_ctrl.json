@@ -1,58 +1,6 @@
 {
 	"power_plant_models":
 	{
-		"ice":
-	 	{
-			"path": "ice",
-			"init_path_low_Q": "ice_low",
-			"Q_design": 1e6,
-			"Q_min": 0.4,
-			"Q_low": 0.7,
-			"ff_sys": "flue gas cooler:out2_ff:in1",
-			"rf_sys": "bf:out1_cogeneration unit:in1",
-			"heat_bus": "heat",
-			"power_bus": "power",
-			"ti_bus": "ti"
-		},
-		"hp":
-	 	{
-			"path": "hp",
-			"init_path_low_Q": "hp_low",
-			"Q_design": 1e6,
-			"Q_low": 0.4,
-			"Q_min": 0.125,
-			"ff_sys": "condenser:out2_system feed:in1",
-			"rf_sys": "system return:out1_condenser:in2",
-			"heat_bus": "heat",
-			"power_bus": "power",
-			"ti_bus": "ti"
-		},
-		"eb":
-	 	{
-			"path": "eb",
-			"init_path_low_Q": "eb_low_Q",
-			"Q_design": 1e6,
-			"Q_min": 0.0001,
-			"Q_low": 0.1,
-			"ff_sys": "electrode boiler:out1_cooling water warm:in1",
-			"rf_sys": "cooling water cold:out1_electrode boiler:in1",
-			"heat_bus": "heat",
-			"power_bus": "power",
-			"ti_bus": "ti"
-		},
-		"plb":
-	 	{
-			"path": "plb",
-			"init_path_low_Q": "plb_low_Q",
-			"Q_design": 1e6,
-			"Q_min": 0.01,
-			"Q_low": 0.15,
-			"ff_sys": "heat exchanger:out2_cooling water warm:in1",
-			"rf_sys": "cooling water cold:out1_heat exchanger:in2",
-			"heat_bus": "heat",
-			"power_bus": "power",
-			"ti_bus": "ti"
-		},
 		"he_charge":
 	 	{
 			"path": "he_charge",
@@ -70,36 +18,23 @@
 			"power_bus": "power",
 			"ti_bus": "ti"
 		},
-		"he_discharge":
-	 	{
-			"path": "he_discharge",
-			"init_path_low_Q": "he_discharge_low",
-			"Q_design": 1e6,
-			"Q_low": 0.2,
-			"Q_min": 0.01,
-			"ff_sys": "heat exchanger:out2_HS in:in1",
-			"rf_sys": "HS out:out1_heat exchanger:in2",
-			"ff_sto": "heat exchanger:out1_TES in:in1",
-			"rf_sto": "TES out:out1_heat exchanger:in1",
-			"heat_bus": "heat",
-			"power_bus": "power",
-			"ti_bus": "ti"
-		},
 		"hp_discharge":
 	 	{
-			"path": "hp_discharge_R245",
-			"init_path_low_Q": "hp_discharge_R245_low",
+			"path": "hp_NH3_70_50",
+			"init_path_low_Q": "hp_NH3_70_50_low_Q",
 			"init_path_sys_hi": "hp_discharge_R245_sys_ff_hi",
 			"T_sys_hi": 115,
 			"Q_design": 1e6,
-			"Q_low": 0.0,
-			"Q_min": 0.2,
+			"Q_low": 0.5,
+			"Q_min": 0.3,
 			"ff_sys": "condenser:out2_system feed:in1",
 			"rf_sys": "system return:out1_condenser:in2",
 			"ff_sto": "evaporator:out1_storage feed:in1",
 			"rf_sto": "storage return:out1_superheater:in1",
-			"heat_bus": "heat",
-			"power_bus": "power",
+			"limiting_mass_flow": "superheater:out2_compressor 1:in1",
+			"m_max": 1.1,
+			"heat_bus": "total delivered heat",
+			"power_bus": "total compressor power",
 			"ti_bus": "ti"
 		}
 	},
@@ -114,9 +49,9 @@
 		"restricted": true,
 		"name": "he_charge",
 		"ttd_min": 3,
-		"T_max": 90
+		"T_max": 75
 	},
-	"storage_boost_order": ["eb"],
+	"storage_boost_order": [],
 	"heat_balance_only": true,
 	"max_iter": 5,
 	"heat_max_dev_rel": 0.0001

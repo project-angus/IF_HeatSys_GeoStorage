@@ -235,7 +235,6 @@ def calc_interface_params(
             else:
                 # no temperature restrictions for the interface
                 # (e. g. heat pump)
-                print(T_ff_sys, T_rf_sys, T_rf_sto)
                 IF_data = sim_IF_discharge(plant, T_ff_sys, T_rf_sys,
                                            T_rf_sto, p_rf, Q)
 
@@ -537,8 +536,15 @@ def sim_IF_discharge_ttd(
         design = plant.wdir + plant.model_data['path']
         if Q < plant.model_data['Q_design'] * plant.model_data['Q_low']:
             # initialise low heat transfer cases with init_path_low_Q
-            init = plant.wdir + plant.model_data['init_path_low_Q']
-            model.solve('offdesign', design_path=design, init_path=init)
+            try:
+                model.solve('offdesign', design_path=design)
+
+                if model.lin_dep or model.res[-1] > 1e-3:
+                    raise hlp.TESPyNetworkError
+
+            except (hlp.TESPyNetworkError, ValueError):
+                init = plant.wdir + plant.model_data['init_path_low_Q']
+                model.solve('offdesign', design_path=design, init_path=init)
         else:
             try:
                 model.solve('offdesign', design_path=design)
@@ -776,26 +782,40 @@ def sim_IF_charge(plant, T_rf_sys, T_rf_sto, p_rf, Q, ttd, T_ff_sto_max):
     design = plant.wdir + plant.model_data['path']
     if Q < plant.model_data['Q_design'] * plant.model_data['Q_low']:
         # initialise low heat transfer cases with init_path_low_Q
-        init = plant.wdir + plant.model_data['init_path_low_Q']
         try:
-            model.solve('offdesign', design_path=design, init_path=init)
-        except ValueError:
             model.solve('offdesign', design_path=design)
+
+            if model.lin_dep or model.res[-1] > 1e-3:
+                raise hlp.TESPyNetworkError
+
+        except (hlp.TESPyNetworkError, ValueError):
+            init = plant.wdir + plant.model_data['init_path_low_Q']
+            model.solve('offdesign', design_path=design, init_path=init)
     else:
         try:
             model.solve('offdesign', design_path=design)
-        except ValueError:
-            if T_rf_sto < 30:
-                try:
-                    init = plant.wdir + plant.model_data['init_path_sto_low']
-                    model.solve('offdesign', design_path=design, init_path=init)
-                except:
-                    pass
-            elif T_rf_sys > 95:
-                init = plant.wdir + plant.model_data['init_path_sys_hi']
-                model.solve('offdesign', design_path=design, init_path=init)
-            else:
+
+            if model.lin_dep or model.res[-1] > 1e-3:
+                raise hlp.TESPyNetworkError
+
+        except (hlp.TESPyNetworkError, ValueError):
+
+            try:
                 model.solve('offdesign', design_path=design, init_path=design)
+
+            except ValueError:
+
+                if T_rf_sto < 30:
+                    try:
+                        init = plant.wdir + plant.model_data['init_path_sto_low']
+                        model.solve('offdesign', design_path=design, init_path=init)
+                    except:
+                        pass
+                elif T_rf_sys > 95:
+                    init = plant.wdir + plant.model_data['init_path_sys_hi']
+                    model.solve('offdesign', design_path=design, init_path=init)
+                else:
+                    model.solve('offdesign', design_path=design, init_path=design)
 
     # storage interface temperatures
     T_sys = model.imp_conns[plant.model_data['ff_sys']].T.val

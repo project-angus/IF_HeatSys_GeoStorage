@@ -16,7 +16,6 @@ class CoupledModel:
         - reads input timeseries
         :param path: (string) path to *.main_ctrl.json
         """
-        # print("PATH: {}".format(path[0]))
         self.__prop = Properties(path=path[0])
         self.__gs = GeoStorage(self.__prop)
         self.__pp_info = pp.load_models(self.__prop)
@@ -48,7 +47,7 @@ class CoupledModel:
 
         info('INTERFACE time stepping prepared')
 
-        return 80, 35
+        return 50, 40
 
     def execute(self):
         """
@@ -72,16 +71,14 @@ class CoupledModel:
             if Q_target > 1.e-3:
                 storage_mode = 'charging'
             elif Q_target < -1.e-3:
-                storage_mode = 'discharging' 
-            else: 
+                storage_mode = 'discharging'
+            else:
                 storage_mode = 'shutin'
             #storage_mode = 'charging' if Q_target > 1.e-3 elif Q_target < -1.e-3 'discharging' else 'shutin'
-            print('Storage mode {}'.format(storage_mode))
             Q_sto, name_plant, Q_plant, P_plant, ti_plant, T_ff_sto, T_rf_sto, m_sto, pp_err = \
                 self.execute_timestep(t_step, Q_target, T_ff_sys, T_rf_sys, p_ff_sys, p_rf_sys, T_rf_sto_0[storage_mode])
 
             T_rf_sto_0[storage_mode] = T_rf_sto
-            print('T_rf_sto {}'.format(T_rf_sto))
 
             # postprocess timestep
             self.evaluate_timestep(t_step, current_time, name_plant, Q_target,  Q_plant, Q_sto, P_plant, ti_plant,
@@ -131,8 +128,13 @@ class CoupledModel:
         :return: calculation resulsts (floats) and name_plant (string)
         """
         # initialization
-        print('T_rf_sto {}'.format(T_rf_sto))
-        storage_mode = 'charging' if Q_target > 0. else 'discharging'  # TO_DO: case Q_target = 0.
+        if Q_target > 1.e-3:
+            storage_mode = 'charging'
+        elif Q_target < -1.e-3:
+            storage_mode = 'discharging'
+        else:
+            storage_mode = 'shutin'
+
         Q = Q_target
         # iteration
         for iter in range(self.__prop.iter_max):
@@ -147,11 +149,18 @@ class CoupledModel:
                     Q_sto, name_plant, P_plant, Q_plant, ti_plant, T_ff_sto, T_rf_sto, m_sto, pp_err = \
                         0, '', 0, 0, 0, 90, T_rf_sto, 0, False
 
-                info('POWERPLANT calculation completed')
-                # geostorage
-                T_rf_sto_geo = self.__gs.run_storage_simulation(T_ff_sto, m_sto, storage_mode)
-                # evaluate
-                info('GEOSTORAGE return temperature: {}'.format(T_rf_sto_geo))
+                if m_sto == 0:
+                    storage_mode = 'shutin'
+
+                if storage_mode != 'shutin':
+                    info('POWERPLANT calculation completed')
+                    # geostorage
+                    T_rf_sto_geo = self.__gs.run_storage_simulation(T_ff_sto, m_sto, storage_mode)
+                    # evaluate
+                    info('GEOSTORAGE return temperature: {}'.format(T_rf_sto_geo))
+
+                else:
+                    T_rf_sto_geo = T_rf_sto
 
                 error = abs(T_rf_sto_geo - T_rf_sto)
                 info('INTERFACE coupling error: {}'.format(error))

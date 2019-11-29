@@ -117,7 +117,7 @@
 		"T_max": 90
 	},
 	"storage_boost_order": ["eb"],
-	"heat_balance_only": false,
+	"heat_balance_only": true,
 	"max_iter": 5,
 	"heat_max_dev_rel": 0.0001
 }

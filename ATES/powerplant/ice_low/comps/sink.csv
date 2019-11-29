@@ -1,0 +1,4 @@
+label;cp;busses;bus_param;bus_P_ref;bus_char;mode;design;offdesign;interface
+flue gas outlet;sink;[];[];[];[];auto;[];[];False
+cooling water outlet1;sink;[];[];[];[];auto;[];[];False
+ff;sink;[];[];[];[];auto;[];[];False

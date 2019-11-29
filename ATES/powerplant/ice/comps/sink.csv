@@ -1,0 +1,4 @@
+label;cp;busses;bus_param;bus_P_ref;bus_char;design;offdesign;interface;design_path
+chimney bypass;sink;[];[];[];[];[];[];False;nan
+chimney;sink;[];[];[];[];[];[];False;nan
+cooling water sink;sink;[];[];[];[];[];[];False;nan

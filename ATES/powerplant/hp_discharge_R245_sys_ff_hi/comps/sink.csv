@@ -1,0 +1,4 @@
+label;cp;busses;bus_param;bus_P_ref;bus_char;design;offdesign;interface;design_path
+system feed;sink;[];[];[];[];[];[];False;nan
+storage feed;sink;[];[];[];[];[];[];False;nan
+coolant out;sink;[];[];[];[];[];[];False;nan

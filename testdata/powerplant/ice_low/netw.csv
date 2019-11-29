@@ -1,2 +1,0 @@
-T_max;T_min;T_unit;fluids;h_max;h_min;h_unit;m_unit;p_max;p_min;p_unit
-1200;10;C;['Ar', 'CH4', 'CO2', 'H2O', 'N2', 'NH3', 'O2'];7000000.0;1000.0;J / kg;kg / s;10;0.5;bar

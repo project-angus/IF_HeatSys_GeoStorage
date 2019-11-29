@@ -1,0 +1,4 @@
+label;cp;busses;bus_param;bus_P_ref;bus_char;design;offdesign;interface;design_path
+fuel;source;[];[];[];[];[];[];False;nan
+ambient;source;[];[];[];[];[];[];False;nan
+cooling water;source;[];[];[];[];[];[];False;nan

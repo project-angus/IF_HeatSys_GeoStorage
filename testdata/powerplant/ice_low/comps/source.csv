@@ -1,5 +1,0 @@
-label;cp;busses;bus_param;bus_P_ref;bus_char;mode;design;offdesign;interface
-fuel;source;[];[];[];[];auto;[];[];False
-ambient;source;[];[];[];[];auto;[];[];False
-bf;source;[];[];[];[];auto;[];[];False
-cooling water inlet2;source;[];[];[];[];auto;[];[];False

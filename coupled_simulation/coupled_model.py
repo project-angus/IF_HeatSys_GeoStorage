@@ -56,7 +56,7 @@ class CoupledModel:
         :return:
         """
         T_DC, T_C = self.prepare_timestepping()
-        T_rf_sto_0 = {'charging': T_C, 'discharging': T_DC}
+        T_rf_sto_0 = {'charging': T_C, 'discharging': T_DC, 'shutin': 0}
 
         for t_step in range(self.__prop.t_steps_total):
 
@@ -68,11 +68,20 @@ class CoupledModel:
 
             info('Target heat flow: {}'.format(Q_target))
 
-            storage_mode = 'charging' if Q_target > 0. else 'discharging'
+            #storage_mode = 'charging' if Q_target > 1.e-3 elif Q_target < -1.e-3 'discharging' else 'shutin'
+            if Q_target > 1.e-3:
+                storage_mode = 'charging'
+            elif Q_target < -1.e-3:
+                storage_mode = 'discharging' 
+            else: 
+                storage_mode = 'shutin'
+            #storage_mode = 'charging' if Q_target > 1.e-3 elif Q_target < -1.e-3 'discharging' else 'shutin'
+            print('Storage mode {}'.format(storage_mode))
             Q_sto, name_plant, Q_plant, P_plant, ti_plant, T_ff_sto, T_rf_sto, m_sto, pp_err = \
                 self.execute_timestep(t_step, Q_target, T_ff_sys, T_rf_sys, p_ff_sys, p_rf_sys, T_rf_sto_0[storage_mode])
 
             T_rf_sto_0[storage_mode] = T_rf_sto
+            print('T_rf_sto {}'.format(T_rf_sto))
 
             # postprocess timestep
             self.evaluate_timestep(t_step, current_time, name_plant, Q_target,  Q_plant, Q_sto, P_plant, ti_plant,
@@ -98,10 +107,10 @@ class CoupledModel:
             p_ff_sys = float(self.__input_ts.loc[self.__input_ts.time == current_time, 'pressure_feed'].values[0])
             p_rf_sys = float(self.__input_ts.loc[self.__input_ts.time == current_time, 'pressure_return'].values[0])
 
-            os.system('mv {}_HEAT_TRANSPORT_domain_primary_variables.txt {}/HEAT_TRANSPORT.IC'.format(
+            os.system('cp {}_HEAT_TRANSPORT_domain_primary_variables.txt {}/HEAT_TRANSPORT.IC'.format(
                 self.__gs.simulation_files(), os.path.dirname(self.__gs.simulation_files())))
             if self.__gs.storage_type() == 'ATES':
-                os.system('mv {}_LIQUID_FLOW_domain_primary_variables.txt {}/LIQUID_FLOW.IC'.format(
+                os.system('cp {}_LIQUID_FLOW_domain_primary_variables.txt {}/LIQUID_FLOW.IC'.format(
                     self.__gs.simulation_files(), os.path.dirname(self.__gs.simulation_files())))
         except KeyError:
             Q_target, T_ff_sys, T_rf_sys, p_ff_sys, p_rf_sys = None, None, None, None, None
@@ -122,6 +131,7 @@ class CoupledModel:
         :return: calculation resulsts (floats) and name_plant (string)
         """
         # initialization
+        print('T_rf_sto {}'.format(T_rf_sto))
         storage_mode = 'charging' if Q_target > 0. else 'discharging'  # TO_DO: case Q_target = 0.
         Q = Q_target
         # iteration

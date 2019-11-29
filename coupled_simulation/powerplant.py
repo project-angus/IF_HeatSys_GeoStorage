@@ -235,6 +235,7 @@ def calc_interface_params(
             else:
                 # no temperature restrictions for the interface
                 # (e. g. heat pump)
+                print(T_ff_sys, T_rf_sys, T_rf_sto)
                 IF_data = sim_IF_discharge(plant, T_ff_sys, T_rf_sys,
                                            T_rf_sto, p_rf, Q)
 
@@ -771,8 +772,11 @@ def sim_IF_charge(plant, T_rf_sys, T_rf_sto, p_rf, Q, ttd, T_ff_sto_max):
             model.solve('offdesign', design_path=design)
         except (ValueError):
             if T_rf_sto < 30:
-                init = plant.wdir + plant.model_data['init_path_sto_low']
-                model.solve('offdesign', design_path=design, init_path=init)
+                try:
+                    init = plant.wdir + plant.model_data['init_path_sto_low']
+                    model.solve('offdesign', design_path=design, init_path=init)
+                except:
+                    pass
             elif T_rf_sys > 95:
                 init = plant.wdir + plant.model_data['init_path_sys_hi']
                 model.solve('offdesign', design_path=design, init_path=init)

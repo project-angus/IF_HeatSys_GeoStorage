@@ -200,7 +200,7 @@ def calc_interface_params(ppinfo, T_ff_sys, T_rf_sys, T_rf_sto, Q, mode):
                    'Interface operation impossible.')
             logging.warning(msg)
             T_ff_sto = T_rf_sto
-            IF_data = 0, 0, 0, T_rf_sys, T_ff_sto, T_rf_sto, 0, False
+            IF_data = 0, 0, 0, 0, T_ff_sto, T_rf_sto, 0, False
 
         else:
             IF_data = sim_IF_discharge(plant, T_ff_sys, T_rf_sys, T_rf_sto, Q)

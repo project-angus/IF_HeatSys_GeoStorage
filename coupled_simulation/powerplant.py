@@ -11,12 +11,7 @@ Created on Mon Feb 12 15:17:46 2018
 import numpy as np
 import logging
 from tespy import nwkr, logger, hlp
-from CoolProp import AbstractState as AS
-import CoolProp as CP
 import json
-
-global water
-water = AS('HEOS', 'water')
 
 logger.define_logging(log_version=True, file_level=logging.DEBUG,
                       screen_level=logging.INFO)
@@ -59,9 +54,6 @@ class model:
         self.name = name
 
         self.load_tespy_model()
-        self.instance.solve('offdesign',
-                            design_path=self.wdir + self.model_data['path'],
-                            init_path=self.wdir + self.model_data['path'])
         msg = 'Successfully loaded TESPy model ' + name + '.'
         logging.debug(msg)
 
@@ -69,11 +61,46 @@ class model:
 
         # load tespy models with the network_reader module
         self.instance = nwkr.load_nwk(self.wdir + self.model_data['path'])
+        self.instance.set_attr(m_range=self.model_data['m_range'])
         self.instance.set_printoptions(print_level='none')
 
+        # design heat flow
+        self.instance.imp_busses[self.model_data['heat_bus_sys']].set_attr(
+            P=self.model_data['Q_design'])
 
-def calc_interface_params(
-        ppinfo, T_ff_sys, T_rf_sys, T_rf_sto, p_ff, p_rf, Q, mode, it):
+        # design system temperatures
+        self.instance.imp_conns[self.model_data['ff_sys']].set_attr(
+            T=self.model_data['T_ff_sys_design'])
+
+        self.instance.imp_conns[self.model_data['rf_sys']].set_attr(
+            T=self.model_data['T_rf_sys_design'])
+
+        # design storage temperatures
+        self.instance.imp_conns[self.model_data['ff_sto']].set_attr(
+            T=self.model_data['T_ff_sto_design'])
+
+        self.instance.imp_conns[self.model_data['rf_sto']].set_attr(
+            T=self.model_data['T_rf_sto_design'])
+
+        # solve design case and save to path
+        self.instance.solve('design')
+        self.new_design = self.wdir + self.model_data['path'] + '_design'
+        self.instance.save(self.new_design)
+
+        # offdesign test
+        self.instance.solve('offdesign', design_path=self.new_design,
+                            init_path=self.new_design)
+
+        # create low load data
+        Q_range = np.linspace(self.model_data['Q_low'], 1, 3)[::-1] * self.model_data['Q_design']
+        for Q in Q_range:
+            self.instance.imp_busses[self.model_data['heat_bus_sys']].set_attr(P=Q)
+
+            self.instance.solve('offdesign', design_path=self.new_design)
+        self.instance.save(self.new_design + '_low_Q')
+
+
+def calc_interface_params(ppinfo, T_ff_sys, T_rf_sys, T_rf_sto, Q, mode):
     """
     Calculates the interface parameters at the heat exchanger of the thermal
     energy storage. The heat exchanger is always part of the network, it may
@@ -120,43 +147,10 @@ def calc_interface_params(
     mode : str
         Charging or discharging mode.
 
-    p_ff : float
-        Heating system feed flow pressure.
-
-    p_rf : float
-        Heating system return flow pressure.
-
-    it : int
-        Internal iteration count.
-
     Returns
     -------
-    Q_sto : float
-        Storage heat exchanger transferred heat.
-
-    plant : str
-        Name of additional power plant.
-
-    Q_plant : float
-        Transferred heat from additional power plant.
-
-    P_plant : float
-        Power input/output of additional power plant.
-
-    ti_plant : float
-        Thermal input of additional power plant.
-
-    T_ff_sto :
-        Storage feed flow temperature (to storage).
-
-    T_rf_sto :
-        Storage return flow temperature (from storage).
-
-    m_sto : float
-        Mass flow at storage side of heat exchanger.
-
-    err : bool
-        Indicates whether an error occurred in calculation.
+    IF_DATA : list
+        List of exchange parameters.
     """
 
     if mode == 'charging':
@@ -176,38 +170,24 @@ def calc_interface_params(
                    'Interface operation impossible.')
             logging.warning(msg)
             T_ff_sto = T_rf_sto
-            return 0, None, 0, 0, 0, T_ff_sto, T_rf_sto, 0, False
+            return 0, 0, 0, 0, T_ff_sto, T_rf_sto, 0, False
 
         else:
 
             # temperature restriction for storage feed flow temperature
             ttd = ppinfo['charge']['ttd_min']
             T_ff_sto_max = ppinfo['charge']['T_max']
+
             # system feed flow temperature as temperature at interface
             # inlet
-            T = T_ff_sys
-            IF_data = sim_IF_charge(plant, T, T_rf_sto, p_rf, Q, ttd, T_ff_sto_max)
+            IF_data = sim_IF_charge(plant, T_ff_sys, T_rf_sto, Q, ttd, T_ff_sto_max)
 
-        Q_IF = IF_data[1]
-        T_ff_sto = IF_data[5]
-        m_sto = IF_data[7]
-        err = IF_data[9]
-
-        return Q_IF, None, 0, 0, 0, T_ff_sto, T_rf_sto, m_sto, err
+        return IF_data
 
     elif mode == 'discharging':
 
-        # calculate mass flow for given return and feed flow temperature and
-        # transferred heat, this is for convergence stability purposes only!
-        water.update(CP.PT_INPUTS, p_rf * 1e5, T_rf_sys + 273.15)
-        h_return = water.hmass()
-        water.update(CP.PT_INPUTS, p_ff * 1e5, T_ff_sys + 273.15)
-        h_feed = water.hmass()
-        mass_flow = Q / (h_feed - h_return)
-
         # read interface model information
         discharge = ppinfo['discharge']['name']
-        ttd_restriction = ppinfo['discharge']['restricted']
         plant = ppinfo['power_plant_models'][discharge]['plant']
 
         # check for minimum heat transfer
@@ -220,107 +200,12 @@ def calc_interface_params(
                    'Interface operation impossible.')
             logging.warning(msg)
             T_ff_sto = T_rf_sto
-            IF_data = Q, 0, 0, 0, T_rf_sys, T_ff_sto, T_rf_sto, 0, p_rf, False
+            IF_data = 0, 0, 0, T_rf_sys, T_ff_sto, T_rf_sto, 0, False
 
         else:
+            IF_data = sim_IF_discharge(plant, T_ff_sys, T_rf_sys, T_rf_sto, Q)
 
-            if ttd_restriction is True:
-                # temperature restrictions for the interface (e. g. heat
-                # exchanger)
-                ttd = ppinfo['discharge']['ttd_min']
-                IF_data = sim_IF_discharge_ttd(plant, T_ff_sys, T_rf_sys,
-                                               T_rf_sto, p_rf, mass_flow, Q,
-                                               ttd)
-
-            else:
-                # no temperature restrictions for the interface
-                # (e. g. heat pump)
-                IF_data = sim_IF_discharge(plant, T_ff_sys, T_rf_sys,
-                                           T_rf_sto, p_rf, Q)
-
-        Q_res = IF_data[0]
-        Q_IF = IF_data[1]
-        P_IF = IF_data[2]
-        ti_IF = IF_data[3]
-        T_sys = IF_data[4]
-        T_ff_sto = IF_data[5]
-        T_rf_sto = IF_data[6]
-        m_sto = IF_data[7]
-        p_sys = IF_data[8]
-        err = IF_data[9]
-
-        if abs(IF_data[0]) < 1e-1:
-            # heat flow target delivered by the interface plant
-            msg = ('Feed flow temperature level met by storage interface: '
-                   'Transferred heat in ' + mode + ' mode is ' +
-                   str(round(Q_IF, 0)) + ' W, target value was ' +
-                   str(round(Q, 0)) + ' W. System feed flow temperature is '
-                   'at ' + str(round(T_sys, 1)) + ' C with storage feed flow '
-                   'temperature at ' + str(round(T_ff_sto, 1)) + ' C.')
-            logging.debug(msg)
-
-            return Q_IF, None, P_IF, 0, ti_IF, T_ff_sto, T_rf_sto, m_sto, err
-
-        else:
-            # heat flow target not met by the interface plant
-            msg = ('Feed flow temperature level NOT met by storage interface: '
-                   'Transferred heat in ' + mode + ' mode is ' +
-                   str(round(Q_IF, 0)) + ' W, target value was ' +
-                   str(round(Q, 0)) + ' W. System feed flow temperature is '
-                   'at ' + str(round(T_sys, 1)) + ' C with storage feed flow '
-                   'temperature at ' + str(round(T_ff_sto, 1)) + ' C.')
-            logging.warning(msg)
-
-        if ppinfo['heat_balance_only']:
-            # return storage parameters only
-            return Q_IF, None, P_IF, 0, ti_IF, T_ff_sto, T_rf_sto, m_sto, err
-
-        else:
-            # calculate power plant operation to replace missing heat
-            # extraction
-            for sto_booster in ppinfo['storage_boost_order']:
-                plant = ppinfo['power_plant_models'][sto_booster]['plant']
-                data = sim_power_plant_operation(plant, T_ff_sys, T_sys,
-                                                 p_sys, mass_flow, Q_res)
-
-                if data[0] is True:
-                    # power plant operation possible
-                    P_plant = data[1]
-                    Q_plant = data[2]
-                    ti_plant = data[3]
-                    Q_diff = Q_res - Q_plant
-
-                    if (abs(Q_diff / Q) > ppinfo['heat_max_dev_rel'] and
-                            it < ppinfo['max_iter']):
-                        msg = ('Repeat powerplant calculation, residual value '
-                               'of heat flow is ' + str(round(Q_diff, 0)) +
-                               ' W, relative deviation of actual heat flow to '
-                               'target is too high: ' +
-                               str(round(Q_diff / Q, 4)) + '.')
-                        logging.info(msg)
-                        it += 1
-                        p_ff = plant.instance.imp_conns[
-                                plant.model_data['ff_sys']].p.val
-                        return calc_interface_params(
-                                ppinfo, T_ff_sys, T_rf_sys, T_rf_sto,
-                                p_ff, p_rf, Q, mode, it)
-
-                    else:
-                        msg = ('Calculation successful, residual value of '
-                               'heat flow is ' + str(round(Q_diff, 0)) +
-                               ' W, relative deviation is ' +
-                               str(round(Q_diff / Q, 4)) + '. Power plant '
-                               'booster is \'' + sto_booster + '\'.')
-                        logging.debug(msg)
-
-                        return (Q_IF, sto_booster, P_plant, Q_plant,
-                                ti_plant, T_ff_sto, T_rf_sto, m_sto, err)
-
-            # no power plant operation possible
-            msg = ('No power plant operation possible, heating system target '
-                   'feed flow temperature could not be met.')
-            logging.error(msg)
-            return Q_IF, None, 0, 0, 0, T_ff_sto, T_rf_sto, m_sto, err
+        return IF_data
 
     else:
         msg = ('Mode for interface parameter calculation at '
@@ -330,258 +215,7 @@ def calc_interface_params(
         raise ValueError(msg)
 
 
-def sim_power_plant_operation(
-        plant, T_ff_sys, T_rf_sys,p_rf, mass_flow, Q_res):
-    """
-    Calculate the operation of a certain power plant given the required mass
-    flow as well as the inlet and outlet temperatures regarding the heating
-    system.
-
-    Parameters
-    ----------
-    plant : coupled_simulation.powerplant.model
-        Power plant model object, holding power plant information.
-
-    T_ff_sys : float
-        Heating system feed flow temperature (to heating system).
-
-    T_rf_sys : float
-        Heating system return flow temperature (from heat exchanger!!).
-
-    p_rf : float
-        Heating system return flow pressure.
-
-    mass_flow : float
-        District heating water mass flow through the plant.
-
-    Q_res : float
-        Value of residual heat flow.
-
-    Returns
-    -------
-    success : bool
-        Calculation successful.
-
-    Q_plant : float
-        Transferred heat from additional power plant.
-
-    P_plant : float
-        Power input/output of additional power plant.
-
-    ti_plant : float
-        Thermal input of additional power plant.
-    """
-
-    model = plant.instance
-    Q_min = plant.model_data['Q_design'] * plant.model_data['Q_min']
-
-    if Q_res < Q_min:
-        msg = ('Power plant operation of plant \'' + plant.name +
-               '\' not possible due to load restriction: Heat flow required '
-               '(' + str(round(Q_res, 0)) + ' W) below minimum possible heat '
-               'flow for power plant \'' + plant.name + '\' (' +
-               str(round(Q_min, 0)) + ' W).')
-        logging.debug(msg)
-        return False, 0, 0, 0
-
-    msg = ('Heat flow required (' + str(round(Q_res, 0)) + ' W) will be '
-           'delivered by power plant \'' + plant.name + '\'.')
-    logging.debug(msg)
-
-    # parameter specification
-    model.imp_conns[plant.model_data['ff_sys']].set_attr(T=T_ff_sys)
-    model.imp_conns[plant.model_data['rf_sys']].set_attr(
-            m=mass_flow, p=p_rf, T=T_rf_sys)
-    model.imp_busses[plant.model_data['heat_bus']].set_attr(P=np.nan)
-
-    # solving
-    design = plant.wdir + plant.model_data['path']
-    if Q_res < plant.model_data['Q_design'] * plant.model_data['Q_low']:
-        # initialise low heat transfer cases with init_path_low_Q
-        init = plant.wdir + plant.model_data['init_path_low_Q']
-        try:
-            model.solve('offdesign', design_path=design, init_path=init)
-        except ValueError:
-            msg = ('Encountered ValueError in (most likely fluid property) '
-                   'calculation at plant \'' + plant.name + '\'. Skipping to '
-                   'next plant in order. If this happens frequently, the '
-                   'power plant might not be suited for the respective task.')
-            logging.error(msg)
-            return False, 0, 0, 0
-    else:
-        try:
-            model.solve('offdesign', design_path=design, init_path=design)
-
-        except ValueError:
-            msg = ('Encountered ValueError in (most likely fluid property) '
-                   'calculation at plant \'' + plant.name + '\'. Skipping to '
-                   'next plant in order. If this happens frequently, the '
-                   'power plant might not be suited for the respective task.')
-            logging.error(msg)
-            return False, 0, 0, 0
-
-    if model.res[-1] < 1e-3 and model.lin_dep is False:
-        P = model.imp_busses[plant.model_data['power_bus']].P.val
-        Q = model.imp_busses[plant.model_data['heat_bus']].P.val
-        ti = model.imp_busses[plant.model_data['ti_bus']].P.val
-        msg = ('Calculation for power plant model \'' + plant.name +
-               '\' successful, heat flow is ' + str(round(Q, 0)) + ' W.')
-        logging.debug(msg)
-        return True, P, Q, ti
-    else:
-        msg = ('Could not find a steady state solution for power plant model '
-               '\'' + plant + '\' operation, trying next plant.')
-        logging.debug(msg)
-        return False, 0, 0, 0
-
-
-def sim_IF_discharge_ttd(
-        plant, T_ff_sys, T_rf_sys, T_rf_sto, p_rf, mass_flow, Q, ttd):
-    """
-    Calculate the operation of the interface plant (e. g. heat exchanger or
-    heat pump) at given terminal temperature restirctions.
-
-    Parameters
-    ----------
-    plant : coupled_simulation.powerplant.model
-        Power plant model object, holding power plant information.
-
-    T_ff_sys : float
-        Heating system feed flow temperature (to heating system).
-
-    T_rf_sys : float
-        Heating system return flow temperature (to interface).
-
-    T_rf_sto : float
-        Storage return flow temperature (from storage).
-
-    p_rf : float
-        Heating system return flow pressure.
-
-    mass_flow : float
-        District heating water mass flow through the interface plant.
-
-    Q : float
-        Value of heat flow.
-
-    ttd : float
-        Terminal temperature difference at the interface plant.
-
-    Returns
-    -------
-    Q_res : float
-        Residual heat flow.
-
-    Q_IF : float
-        Transferred heat of storage interface.
-
-    P_IF : float
-        Power input/output of storage interface.
-
-    ti_IF : float
-        Thermal input of storage interface.
-
-    T_ff_sys : float
-        Heating system feed flow temperature (to heating system).
-
-    T_rf_sys : float
-        Heating system return flow temperature (to interface).
-
-    T_rf_sto : float
-        Storage return flow temperature (from storage).
-
-    mass_flow : float
-        District heating water mass flow through the plant.
-
-    p_sys : float
-        Heating system feed flow pressure.
-
-    err : bool
-        Indicates whether an error occurred in calculation.
-    """
-    if T_rf_sto < T_rf_sys + ttd:
-        # heat extraction from storage impossible, maxium temperature level
-        # is below return flow temperature
-        msg = ('Storage heat extraction impossible as storage temperature '
-               'is below heating system return flow temperature.')
-        logging.error(msg)
-        Q_IF = 0
-        P_IF = 0
-        ti_IF = 0
-        m_sto = 0
-        T_ff_sto = T_rf_sto
-        T_sys = T_rf_sys
-        p_sys = p_rf
-
-    elif T_rf_sto < T_ff_sys + ttd:
-
-        # maximum temperature restriction
-        model = plant.instance
-        model.set_attr(m_range=[0.002, 100])
-        # specify system parameters
-        model.imp_busses[plant.model_data['heat_bus']].set_attr(P=np.nan)
-        model.imp_conns[plant.model_data['rf_sys']].set_attr(
-                T=T_rf_sys, p=p_rf)
-        model.imp_conns[plant.model_data['ff_sto']].set_attr(T=np.nan)
-        model.imp_conns[plant.model_data['rf_sto']].set_attr(T=T_rf_sto)
-
-        # storage temperature below system feed flow temperature
-        # specify temperature value for system feed flow
-        T = T_rf_sto - ttd
-
-        model.imp_conns[plant.model_data['ff_sys']].set_attr(
-                m=mass_flow, T=T, design=[])
-
-        # solving
-        design = plant.wdir + plant.model_data['path']
-        if Q < plant.model_data['Q_design'] * plant.model_data['Q_low']:
-            # initialise low heat transfer cases with init_path_low_Q
-            try:
-                model.solve('offdesign', design_path=design)
-
-                if model.lin_dep or model.res[-1] > 1e-3:
-                    raise hlp.TESPyNetworkError
-
-            except (hlp.TESPyNetworkError, ValueError):
-                init = plant.wdir + plant.model_data['init_path_low_Q']
-                model.solve('offdesign', design_path=design, init_path=init)
-        else:
-            try:
-                model.solve('offdesign', design_path=design)
-
-                if model.lin_dep or model.res[-1] > 1e-3:
-                    raise hlp.TESPyNetworkError
-            except (hlp.TESPyNetworkError, ValueError):
-                model.solve('offdesign', design_path=design, init_path=design)
-
-        # storage interface temperatures
-        T_sys = model.imp_conns[plant.model_data['ff_sys']].T.val
-        T_ff_sto = model.imp_conns[plant.model_data['ff_sto']].T.val
-        T_rf_sto = model.imp_conns[plant.model_data['rf_sto']].T.val
-        # storage mass flow
-        m_sto = model.imp_conns[plant.model_data['ff_sto']].m.val
-        # pressure at heating system side of interface used as inlet pressure
-        # for storage booster operation
-        p_sys = model.imp_conns[plant.model_data['ff_sys']].p.val
-        # interface transferred energy params
-        Q_IF = model.imp_busses[plant.model_data['heat_bus']].P.val
-        P_IF = model.imp_busses[plant.model_data['power_bus']].P.val
-        ti_IF = model.imp_busses[plant.model_data['ti_bus']].P.val
-
-    else:
-        # restriction inactive
-        return sim_IF_discharge(plant, T_ff_sys, T_rf_sys, T_rf_sto, p_rf, Q)
-
-    Q_res = Q - Q_IF
-
-    err = False
-    if model.lin_dep or model.res[-1] > 1e-3:
-        err = True
-
-    return Q_res, Q_IF, P_IF, ti_IF, T_sys, T_ff_sto, T_rf_sto, m_sto, p_sys, err
-
-
-def sim_IF_discharge(plant, T_ff_sys, T_rf_sys, T_rf_sto, p_rf, Q):
+def sim_IF_discharge(plant, T_ff_sys, T_rf_sys, T_rf_sto, Q):
     """
     Calculate the operation of the interface plant (e. g. heat exchanger or
     heat pump) without temperature restirctions.
@@ -600,31 +234,25 @@ def sim_IF_discharge(plant, T_ff_sys, T_rf_sys, T_rf_sto, p_rf, Q):
     T_rf_sto : float
         Storage return flow temperature (from storage).
 
-    p_rf : float
-        Heating system return flow pressure.
-
     Q : float
         Value of heat flow.
 
     Returns
     -------
-    Q_res : float
-        Residual heat flow.
+    Q_sto : float
+        Heat transferred from storage.
 
-    Q_IF : float
-        Transferred heat of storage interface.
+    Q_sys : float
+        Heat transferred to system.
 
     P_IF : float
         Power input/output of storage interface.
 
-    ti_IF : float
+    TI_IF : float
         Thermal input of storage interface.
 
-    T_ff_sys : float
-        Heating system feed flow temperature (to heating system).
-
-    T_rf_sys : float
-        Heating system return flow temperature (to interface).
+    T_ff_sto : float
+        Storage feed flow temperature (to storage).
 
     T_rf_sto : float
         Storage return flow temperature (from storage).
@@ -632,47 +260,48 @@ def sim_IF_discharge(plant, T_ff_sys, T_rf_sys, T_rf_sto, p_rf, Q):
     mass_flow : float
         District heating water mass flow through the plant.
 
-    p_sys : float
-        Heating system feed flow pressure.
-
     err : bool
         Indicates whether an error occurred in calculation.
     """
     model = plant.instance
 
     # specify system parameters
-    model.imp_busses[plant.model_data['heat_bus']].set_attr(P=np.nan)
-    model.imp_conns[plant.model_data['rf_sys']].set_attr(T=T_rf_sys, p=p_rf)
+    model.imp_busses[plant.model_data['heat_bus_sys']].set_attr(P=np.nan)
+    model.imp_conns[plant.model_data['rf_sys']].set_attr(T=T_rf_sys)
     model.imp_conns[plant.model_data['rf_sto']].set_attr(T=T_rf_sto)
     model.imp_conns[plant.model_data['ff_sto']].set_attr(T=np.nan)
     model.imp_conns[plant.model_data['ff_sys']].set_attr(
             m=np.nan, T=T_ff_sys, design=[])
-    model.imp_busses[plant.model_data['heat_bus']].set_attr(P=Q)
+    model.imp_busses[plant.model_data['heat_bus_sys']].set_attr(P=Q)
 
     # solving
-    design = plant.wdir + plant.model_data['path']
+    design = plant.new_design
     if Q < plant.model_data['Q_design'] * plant.model_data['Q_low']:
         # initialise low heat transfer cases with init_path_low_Q
-        init = plant.wdir + plant.model_data['init_path_low_Q']
-        model.solve('offdesign', design_path=design, init_path=init)
-    else:
         try:
             model.solve('offdesign', design_path=design)
-
             if model.lin_dep or model.res[-1] > 1e-3:
                 raise hlp.TESPyNetworkError
+
         except (hlp.TESPyNetworkError, ValueError):
-            if T_ff_sys > plant.model_data['T_sys_hi']:
-                init = plant.wdir + plant.model_data['init_path_sys_hi']
-                model.solve('offdesign', design_path=design, init_path=init)
-            else:
-                model.solve('offdesign', design_path=design, init_path=design)
+            init = plant.new_design + '_low_Q'
+            model.solve('offdesign', design_path=design, init_path=init)
+
+    else:
+        try:
+            model.solve('offdesign', design_path=design, init_path=design)
+            if model.lin_dep or model.res[-1] > 1e-3:
+                raise hlp.TESPyNetworkError
+
+        except (hlp.TESPyNetworkError, ValueError):
+            model.solve('offdesign', design_path=design, init_path=design)
 
     conn = model.imp_conns[plant.model_data['limiting_mass_flow']]
     m_max = conn.m.design * plant.model_data['m_max']
+    m_min = conn.m.design * plant.model_data['m_min']
     m = conn.m.val_SI
     if m > m_max:
-        model.imp_busses[plant.model_data['heat_bus']].set_attr(P=np.nan)
+        model.imp_busses[plant.model_data['heat_bus_sys']].set_attr(P=np.nan)
         conn.set_attr(m=m_max)
         model.solve('offdesign', design_path=design)
         msg = ('Limiting heat flow due to mass flow restriction in '
@@ -680,30 +309,36 @@ def sim_IF_discharge(plant, T_ff_sys, T_rf_sys, T_rf_sto, p_rf, Q):
                'kg/s; maximum mass flow: ' + str(round(m_max, 2)) + 'kg/s.')
         logging.warning(msg)
 
+    elif m < m_min:
+        msg = ('Shutting off plant due to mass flow restriction in '
+               'extraction plant: mass flow: ' + str(round(m, 2)) +
+               'kg/s; minimum mass flow: ' + str(round(m_max, 2)) + 'kg/s.')
+        logging.warning(msg)
+
     conn.set_attr(m=np.nan)
+
     # storage interface temperatures
-    T_sys = model.imp_conns[plant.model_data['ff_sys']].T.val
+    T_ff_sys = model.imp_conns[plant.model_data['ff_sys']].T.val
     T_ff_sto = model.imp_conns[plant.model_data['ff_sto']].T.val
     T_rf_sto = model.imp_conns[plant.model_data['rf_sto']].T.val
+
     # storage mass flow
     m_sto = model.imp_conns[plant.model_data['ff_sto']].m.val
-    # pressure at heating system side of interface used as inlet pressure
-    # for storage booster operation
-    p_sys = model.imp_conns[plant.model_data['ff_sys']].p.val
+
     # interface transferred energy params
-    Q_IF = model.imp_busses[plant.model_data['heat_bus']].P.val
+    Q_sto = model.imp_busses[plant.model_data['heat_bus_sto']].P.val
+    Q_sys = model.imp_busses[plant.model_data['heat_bus_sys']].P.val
     P_IF = model.imp_busses[plant.model_data['power_bus']].P.val
-    ti_IF = model.imp_busses[plant.model_data['ti_bus']].P.val
-    Q_res = Q - Q_IF
+    TI_IF = model.imp_busses[plant.model_data['ti_bus']].P.val
 
     err = False
     if model.lin_dep or model.res[-1] > 1e-3:
         err = True
 
-    return Q_res, Q_IF, P_IF, ti_IF, T_sys, T_ff_sto, T_rf_sto, m_sto, p_sys, err
+    return Q_sto, Q_sys, P_IF, TI_IF, T_ff_sto, T_rf_sto, m_sto, err
 
 
-def sim_IF_charge(plant, T_rf_sys, T_rf_sto, p_rf, Q, ttd, T_ff_sto_max):
+def sim_IF_charge(plant, T_rf_sys, T_rf_sto, Q, ttd, T_ff_sto_max):
     """
     Calculate the operation of the interface plant for storage charging.
 
@@ -718,9 +353,6 @@ def sim_IF_charge(plant, T_rf_sys, T_rf_sto, p_rf, Q, ttd, T_ff_sto_max):
     T_rf_sto : float
         Storage return flow temperature (from storage).
 
-    p_rf : float
-        Heating system return flow pressure.
-
     Q : float
         Value of heat flow.
 
@@ -732,23 +364,20 @@ def sim_IF_charge(plant, T_rf_sys, T_rf_sto, p_rf, Q, ttd, T_ff_sto_max):
 
     Returns
     -------
-    Q_res : float
-        Residual heat flow.
+    Q_sto : float
+        Heat transferred to storage.
 
-    Q_IF : float
-        Transferred heat of storage interface.
+    Q_sys : float
+        Heat transferred from system.
 
     P_IF : float
         Power input/output of storage interface.
 
-    ti_IF : float
+    TI_IF : float
         Thermal input of storage interface.
 
-    T_ff_sys : float
-        Heating system feed flow temperature (to heating system).
-
-    T_rf_sys : float
-        Heating system return flow temperature (to interface).
+    T_ff_sto : float
+        Storage feed flow temperature (to storage).
 
     T_rf_sto : float
         Storage return flow temperature (from storage).
@@ -756,84 +385,62 @@ def sim_IF_charge(plant, T_rf_sys, T_rf_sto, p_rf, Q, ttd, T_ff_sto_max):
     mass_flow : float
         District heating water mass flow through the plant.
 
-    p_sys : float
-        Heating system feed flow pressure.
-
     err : bool
         Indicates whether an error occurred in calculation.
     """
     model = plant.instance
-    model.set_attr(m_range=[0, 300])
-    # specify system parameters
-    model.imp_busses[plant.model_data['heat_bus']].set_attr(P=np.nan)
-    model.imp_busses[plant.model_data['heat_bus']].set_attr(P=Q)
-    model.imp_conns[plant.model_data['rf_sys']].set_attr(T=T_rf_sys, p=p_rf)
-    model.imp_conns[plant.model_data['rf_sto']].set_attr(T=T_rf_sto)
 
     if T_ff_sto_max < T_rf_sys - ttd:
         T_ff_sto = T_ff_sto_max
     else:
         T_ff_sto = T_rf_sys - ttd
 
+    # specify system parameters
+    model.imp_busses[plant.model_data['heat_bus_sys']].set_attr(P=np.nan)
+    model.imp_busses[plant.model_data['heat_bus_sys']].set_attr(P=Q)
+    model.imp_conns[plant.model_data['rf_sys']].set_attr(T=T_rf_sys)
+    model.imp_conns[plant.model_data['rf_sto']].set_attr(T=T_rf_sto)
     model.imp_conns[plant.model_data['ff_sto']].set_attr(T=T_ff_sto)
-    model.imp_conns[plant.model_data['ff_sys']].set_attr(m=np.nan, T=np.nan, design=[])
+    model.imp_conns[plant.model_data['ff_sys']].set_attr(
+        m=np.nan, T=np.nan, design=[])
 
     # solving
-    design = plant.wdir + plant.model_data['path']
+    design = plant.new_design
     if Q < plant.model_data['Q_design'] * plant.model_data['Q_low']:
         # initialise low heat transfer cases with init_path_low_Q
         try:
             model.solve('offdesign', design_path=design)
-
             if model.lin_dep or model.res[-1] > 1e-3:
                 raise hlp.TESPyNetworkError
 
         except (hlp.TESPyNetworkError, ValueError):
-            init = plant.wdir + plant.model_data['init_path_low_Q']
+            init = plant.new_design + '_low_Q'
             model.solve('offdesign', design_path=design, init_path=init)
     else:
         try:
-            model.solve('offdesign', design_path=design)
-
+            model.solve('offdesign', design_path=design, init_path=design)
             if model.lin_dep or model.res[-1] > 1e-3:
                 raise hlp.TESPyNetworkError
 
         except (hlp.TESPyNetworkError, ValueError):
-
-            try:
-                model.solve('offdesign', design_path=design, init_path=design)
-
-            except ValueError:
-
-                if T_rf_sto < 30:
-                    try:
-                        init = plant.wdir + plant.model_data['init_path_sto_low']
-                        model.solve('offdesign', design_path=design, init_path=init)
-                    except:
-                        pass
-                elif T_rf_sys > 95:
-                    init = plant.wdir + plant.model_data['init_path_sys_hi']
-                    model.solve('offdesign', design_path=design, init_path=init)
-                else:
-                    model.solve('offdesign', design_path=design, init_path=design)
+            model.solve('offdesign', design_path=design, init_path=design)
 
     # storage interface temperatures
-    T_sys = model.imp_conns[plant.model_data['ff_sys']].T.val
+    T_ff_sys = model.imp_conns[plant.model_data['ff_sys']].T.val
     T_ff_sto = model.imp_conns[plant.model_data['ff_sto']].T.val
     T_rf_sto = model.imp_conns[plant.model_data['rf_sto']].T.val
+
     # storage mass flow
     m_sto = model.imp_conns[plant.model_data['ff_sto']].m.val
-    # pressure at heating system side of interface used as inlet pressure
-    # for storage booster operation
-    p_sys = model.imp_conns[plant.model_data['ff_sys']].p.val
+
     # interface transferred energy params
-    Q_IF = model.imp_busses[plant.model_data['heat_bus']].P.val
+    Q_sto = model.imp_busses[plant.model_data['heat_bus_sto']].P.val
+    Q_sys = model.imp_busses[plant.model_data['heat_bus_sys']].P.val
     P_IF = model.imp_busses[plant.model_data['power_bus']].P.val
-    ti_IF = model.imp_busses[plant.model_data['ti_bus']].P.val
-    Q_res = Q - Q_IF
+    TI_IF = model.imp_busses[plant.model_data['ti_bus']].P.val
 
     err = False
     if model.lin_dep or model.res[-1] > 1e-3:
         err = True
 
-    return Q_res, Q_IF, P_IF, ti_IF, T_sys, T_ff_sto, T_rf_sto, m_sto, p_sys, err
+    return Q_sto, Q_sys, P_IF, TI_IF, T_ff_sto, T_rf_sto, m_sto, err

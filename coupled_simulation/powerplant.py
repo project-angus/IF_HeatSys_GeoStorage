@@ -275,26 +275,30 @@ def sim_IF_discharge(plant, T_ff_sys, T_rf_sys, T_rf_sto, Q):
     model.imp_busses[plant.model_data['heat_bus_sys']].set_attr(P=Q)
 
     # solving
-    design = plant.new_design
-    if Q < plant.model_data['Q_design'] * plant.model_data['Q_low']:
-        # initialise low heat transfer cases with init_path_low_Q
-        try:
-            model.solve('offdesign', design_path=design)
-            if model.lin_dep or model.res[-1] > 1e-3:
-                raise hlp.TESPyNetworkError
+    try:
+        design = plant.new_design
+        if Q < plant.model_data['Q_design'] * plant.model_data['Q_low']:
+            # initialise low heat transfer cases with init_path_low_Q
+            try:
+                model.solve('offdesign', design_path=design)
+                if model.lin_dep or model.res[-1] > 1e-3:
+                    raise hlp.TESPyNetworkError
 
-        except (hlp.TESPyNetworkError, ValueError):
-            init = plant.new_design + '_low_Q'
-            model.solve('offdesign', design_path=design, init_path=init)
+            except (hlp.TESPyNetworkError, ValueError):
+                init = plant.new_design + '_low_Q'
+                model.solve('offdesign', design_path=design, init_path=init)
 
-    else:
-        try:
-            model.solve('offdesign', design_path=design, init_path=design)
-            if model.lin_dep or model.res[-1] > 1e-3:
-                raise hlp.TESPyNetworkError
+        else:
+            try:
+                model.solve('offdesign', design_path=design, init_path=design)
+                if model.lin_dep or model.res[-1] > 1e-3:
+                    raise hlp.TESPyNetworkError
 
-        except (hlp.TESPyNetworkError, ValueError):
-            model.solve('offdesign', design_path=design, init_path=design)
+            except (hlp.TESPyNetworkError, ValueError):
+                model.solve('offdesign', design_path=design, init_path=design)
+
+    except ValueError:
+        model.lin_dep = True
 
     conn = model.imp_conns[plant.model_data['limiting_mass_flow']]
     m_max = conn.m.design * plant.model_data['m_max']
@@ -312,7 +316,7 @@ def sim_IF_discharge(plant, T_ff_sys, T_rf_sys, T_rf_sto, Q):
     elif m < m_min:
         msg = ('Shutting off plant due to mass flow restriction in '
                'extraction plant: mass flow: ' + str(round(m, 2)) +
-               'kg/s; minimum mass flow: ' + str(round(m_max, 2)) + 'kg/s.')
+               'kg/s; minimum mass flow: ' + str(round(m_min, 2)) + 'kg/s.')
         logging.warning(msg)
 
     conn.set_attr(m=np.nan)
@@ -405,25 +409,52 @@ def sim_IF_charge(plant, T_rf_sys, T_rf_sto, Q, ttd, T_ff_sto_max):
         m=np.nan, T=np.nan, design=[])
 
     # solving
-    design = plant.new_design
-    if Q < plant.model_data['Q_design'] * plant.model_data['Q_low']:
-        # initialise low heat transfer cases with init_path_low_Q
-        try:
-            model.solve('offdesign', design_path=design)
-            if model.lin_dep or model.res[-1] > 1e-3:
-                raise hlp.TESPyNetworkError
+    try:
 
-        except (hlp.TESPyNetworkError, ValueError):
-            init = plant.new_design + '_low_Q'
-            model.solve('offdesign', design_path=design, init_path=init)
-    else:
-        try:
-            model.solve('offdesign', design_path=design, init_path=design)
-            if model.lin_dep or model.res[-1] > 1e-3:
-                raise hlp.TESPyNetworkError
+        design = plant.new_design
+        if Q < plant.model_data['Q_design'] * plant.model_data['Q_low']:
+            # initialise low heat transfer cases with init_path_low_Q
+            try:
+                model.solve('offdesign', design_path=design)
+                if model.lin_dep or model.res[-1] > 1e-3:
+                    raise hlp.TESPyNetworkError
 
-        except (hlp.TESPyNetworkError, ValueError):
-            model.solve('offdesign', design_path=design, init_path=design)
+            except (hlp.TESPyNetworkError, ValueError):
+                init = plant.new_design + '_low_Q'
+                model.solve('offdesign', design_path=design, init_path=init)
+        else:
+            try:
+                model.solve('offdesign', design_path=design, init_path=design)
+                if model.lin_dep or model.res[-1] > 1e-3:
+                    raise hlp.TESPyNetworkError
+
+            except (hlp.TESPyNetworkError, ValueError):
+                model.solve('offdesign', design_path=design, init_path=design)
+
+    except ValueError:
+        model.lin_dep = True
+
+    conn = model.imp_conns[plant.model_data['limiting_mass_flow']]
+    m_max = conn.m.design * plant.model_data['m_max']
+    m_min = conn.m.design * plant.model_data['m_min']
+    m = conn.m.val_SI
+
+    if m > m_max:
+        model.imp_busses[plant.model_data['heat_bus_sys']].set_attr(P=np.nan)
+        conn.set_attr(m=m_max)
+        model.solve('offdesign', design_path=design)
+        msg = ('Limiting heat flow due to mass flow restriction in '
+               'extraction plant: mass flow: ' + str(round(m, 2)) +
+               'kg/s; maximum mass flow: ' + str(round(m_max, 2)) + 'kg/s.')
+        logging.warning(msg)
+
+    elif m < m_min:
+        msg = ('Shutting off plant due to mass flow restriction in '
+               'extraction plant: mass flow: ' + str(round(m, 2)) +
+               'kg/s; minimum mass flow: ' + str(round(m_min, 2)) + 'kg/s.')
+        logging.warning(msg)
+
+    conn.set_attr(m=np.nan)
 
     # storage interface temperatures
     T_ff_sys = model.imp_conns[plant.model_data['ff_sys']].T.val

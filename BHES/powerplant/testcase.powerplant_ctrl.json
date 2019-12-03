@@ -4,38 +4,49 @@
 		"he_charge":
 	 	{
 			"path": "he_charge",
-			"init_path_low_Q": "he_charge_low",
-			"init_path_sys_hi": "he_charge_sys_ff_hi",
-			"init_path_sto_low": "he_charge_sto_rf_low",
+			"T_ff_sys_design": 45,
+			"T_rf_sys_design": 65,
+			"T_ff_sto_design": 60,
+			"T_rf_sto_design": 35,
 			"Q_design": 1e6,
 			"Q_low": 0.25,
 			"Q_min": 0.01,
+			"m_max": 1000,
+			"m_min": 0,
+			"limiting_mass_flow": "heat exchanger:out1_HS in:in1",
 			"ff_sys": "heat exchanger:out1_HS in:in1",
 			"rf_sys": "HS out:out1_heat exchanger:in1",
 			"ff_sto": "heat exchanger:out2_TES in:in1",
 			"rf_sto": "TES out:out1_heat exchanger:in2",
+			"heat_bus_sys": "heat system",
+			"heat_bus_sto": "heat storage",
 			"heat_bus": "heat",
 			"power_bus": "power",
-			"ti_bus": "ti"
+			"ti_bus": "ti",
+			"m_range": [0, 200]
 		},
 		"hp_discharge":
 	 	{
-			"path": "hp_NH3_70_50",
-			"init_path_low_Q": "hp_NH3_70_50_low_Q",
-			"init_path_sys_hi": "hp_discharge_R245_sys_ff_hi",
-			"T_sys_hi": 115,
+			"path": "hp_discharge",
+			"T_ff_sys_design": 75,
+			"T_rf_sys_design": 45,
+			"T_ff_sto_design": 25,
+			"T_rf_sto_design": 40,
 			"Q_design": 1e6,
 			"Q_low": 0.5,
 			"Q_min": 0.3,
+			"m_max": 1.1,
+			"m_min": 0.3,
+			"limiting_mass_flow": "superheater:out2_compressor 1:in1",
 			"ff_sys": "condenser:out2_system feed:in1",
 			"rf_sys": "system return:out1_condenser:in2",
 			"ff_sto": "evaporator:out1_storage feed:in1",
 			"rf_sto": "storage return:out1_superheater:in1",
-			"limiting_mass_flow": "superheater:out2_compressor 1:in1",
-			"m_max": 1.1,
-			"heat_bus": "total delivered heat",
-			"power_bus": "total compressor power",
-			"ti_bus": "ti"
+			"heat_bus_sys": "heat system",
+			"heat_bus_sto": "heat storage",
+			"power_bus": "power",
+			"ti_bus": "ti",
+			"m_range": [0.1, 100]
 		}
 	},
 	"discharge":
@@ -50,9 +61,5 @@
 		"name": "he_charge",
 		"ttd_min": 3,
 		"T_max": 75
-	},
-	"storage_boost_order": [],
-	"heat_balance_only": true,
-	"max_iter": 5,
-	"heat_max_dev_rel": 0.0001
+	}
 }

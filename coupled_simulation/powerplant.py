@@ -299,6 +299,8 @@ def sim_IF_discharge(plant, T_ff_sys, T_rf_sys, T_rf_sto, Q):
 
     except ValueError:
         model.lin_dep = True
+        conn = model.imp_conns[plant.model_data['limiting_mass_flow']]
+        conn.m.val_SI =  conn.m.design
 
     conn = model.imp_conns[plant.model_data['limiting_mass_flow']]
     m_max = conn.m.design * plant.model_data['m_max']
@@ -338,6 +340,7 @@ def sim_IF_discharge(plant, T_ff_sys, T_rf_sys, T_rf_sto, Q):
     err = False
     if model.lin_dep or model.res[-1] > 1e-3:
         err = True
+        m_sto = 0
 
     return Q_sto, Q_sys, P_IF, TI_IF, T_ff_sto, T_rf_sto, m_sto, err
 
@@ -433,6 +436,8 @@ def sim_IF_charge(plant, T_rf_sys, T_rf_sto, Q, ttd, T_ff_sto_max):
 
     except ValueError:
         model.lin_dep = True
+        conn = model.imp_conns[plant.model_data['limiting_mass_flow']]
+        conn.m.val_SI = conn.m.design
 
     conn = model.imp_conns[plant.model_data['limiting_mass_flow']]
     m_max = conn.m.design * plant.model_data['m_max']
@@ -473,5 +478,6 @@ def sim_IF_charge(plant, T_rf_sys, T_rf_sto, Q, ttd, T_ff_sto_max):
     err = False
     if model.lin_dep or model.res[-1] > 1e-3:
         err = True
+        m_sto = 0
 
     return Q_sto, Q_sys, P_IF, TI_IF, T_ff_sto, T_rf_sto, m_sto, err

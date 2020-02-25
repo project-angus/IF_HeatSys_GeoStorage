@@ -10,7 +10,10 @@ Created on Mon Feb 12 15:17:46 2018
 
 import numpy as np
 import logging
-from tespy import nwkr, logger, hlp
+from tespy.networks import load_network
+from tespy.tools import logger
+from tespy.tools.helpers import TESPyNetworkError
+
 import json
 
 logger.define_logging(log_version=True, file_level=logging.DEBUG,
@@ -60,9 +63,9 @@ class model:
     def load_tespy_model(self):
 
         # load tespy models with the network_reader module
-        self.instance = nwkr.load_nwk(self.wdir + self.model_data['path'])
-        self.instance.set_attr(m_range=self.model_data['m_range'])
-        self.instance.set_printoptions(print_level='none')
+        self.instance = load_network(self.wdir + self.model_data['path'])
+        self.instance.set_attr(
+            m_range=self.model_data['m_range'], iterinfo=False)
 
         # design heat flow
         self.instance.imp_busses[self.model_data['heat_bus_sys']].set_attr(
@@ -282,9 +285,9 @@ def sim_IF_discharge(plant, T_ff_sys, T_rf_sys, T_rf_sto, Q):
             try:
                 model.solve('offdesign', design_path=design)
                 if model.lin_dep or model.res[-1] > 1e-3:
-                    raise hlp.TESPyNetworkError
+                    raise TESPyNetworkError
 
-            except (hlp.TESPyNetworkError, ValueError):
+            except (TESPyNetworkError, ValueError):
                 init = plant.new_design + '_low_Q'
                 model.solve('offdesign', design_path=design, init_path=init)
 
@@ -292,9 +295,9 @@ def sim_IF_discharge(plant, T_ff_sys, T_rf_sys, T_rf_sto, Q):
             try:
                 model.solve('offdesign', design_path=design, init_path=design)
                 if model.lin_dep or model.res[-1] > 1e-3:
-                    raise hlp.TESPyNetworkError
+                    raise TESPyNetworkError
 
-            except (hlp.TESPyNetworkError, ValueError):
+            except (TESPyNetworkError, ValueError):
                 model.solve('offdesign', design_path=design, init_path=design)
 
     except ValueError:
@@ -420,18 +423,18 @@ def sim_IF_charge(plant, T_rf_sys, T_rf_sto, Q, ttd, T_ff_sto_max):
             try:
                 model.solve('offdesign', design_path=design)
                 if model.lin_dep or model.res[-1] > 1e-3:
-                    raise hlp.TESPyNetworkError
+                    raise TESPyNetworkError
 
-            except (hlp.TESPyNetworkError, ValueError):
+            except (TESPyNetworkError, ValueError):
                 init = plant.new_design + '_low_Q'
                 model.solve('offdesign', design_path=design, init_path=init)
         else:
             try:
                 model.solve('offdesign', design_path=design, init_path=design)
                 if model.lin_dep or model.res[-1] > 1e-3:
-                    raise hlp.TESPyNetworkError
+                    raise TESPyNetworkError
 
-            except (hlp.TESPyNetworkError, ValueError):
+            except (TESPyNetworkError, ValueError):
                 model.solve('offdesign', design_path=design, init_path=design)
 
     except ValueError:

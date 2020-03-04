@@ -66,6 +66,8 @@ class model:
         self.instance = load_network(self.wdir + self.model_data['path'])
         self.instance.set_attr(
             m_range=self.model_data['m_range'], iterinfo=False)
+        if self.model_data['debug'] is True:
+            self.instance.set_attr(iterinfo=True)
 
         # design heat flow
         self.instance.imp_busses[self.model_data['heat_bus_sys']].set_attr(
@@ -179,7 +181,7 @@ def calc_interface_params(ppinfo, T_ff_sys, T_rf_sys, T_rf_sto, Q, mode):
 
             # temperature restriction for storage feed flow temperature
             ttd = ppinfo['charge']['ttd_min']
-            T_ff_sto_max = ppinfo['charge']['T_max']
+            T_ff_sto_max = ppinfo['charge']['T_ff_sto_max']
 
             # system feed flow temperature as temperature at interface
             # inlet
@@ -290,20 +292,24 @@ def sim_IF_discharge(plant, T_ff_sys, T_rf_sys, T_rf_sto, Q):
             except (TESPyNetworkError, ValueError):
                 init = plant.new_design + '_low_Q'
                 model.solve('offdesign', design_path=design, init_path=init)
+                if model.lin_dep or model.res[-1] > 1e-3:
+                    raise TESPyNetworkError
 
         else:
             try:
-                model.solve('offdesign', design_path=design, init_path=design)
+                model.solve('offdesign', design_path=design)
                 if model.lin_dep or model.res[-1] > 1e-3:
                     raise TESPyNetworkError
 
             except (TESPyNetworkError, ValueError):
                 model.solve('offdesign', design_path=design, init_path=design)
+                if model.lin_dep or model.res[-1] > 1e-3:
+                    raise TESPyNetworkError
 
-    except ValueError:
+    except (TESPyNetworkError, ValueError):
         model.lin_dep = True
         conn = model.imp_conns[plant.model_data['limiting_mass_flow']]
-        conn.m.val_SI =  conn.m.design
+        conn.m.val_SI = conn.m.design
 
     conn = model.imp_conns[plant.model_data['limiting_mass_flow']]
     m_max = conn.m.design * plant.model_data['m_max']
@@ -311,8 +317,10 @@ def sim_IF_discharge(plant, T_ff_sys, T_rf_sys, T_rf_sto, Q):
     m = conn.m.val_SI
     if m > m_max:
         model.imp_busses[plant.model_data['heat_bus_sys']].set_attr(P=np.nan)
-        conn.set_attr(m=m_max)
-        model.solve('offdesign', design_path=design)
+        m_range = np.linspace(m_max, m, num=3, endpoint=False)
+        for m_val in m_range[::-1]:
+            conn.set_attr(m=m_val)
+            model.solve('offdesign', design_path=design)
         msg = ('Limiting heat flow due to mass flow restriction in '
                'extraction plant: mass flow: ' + str(round(m, 2)) +
                'kg/s; maximum mass flow: ' + str(round(m_max, 2)) + 'kg/s.')
@@ -344,6 +352,10 @@ def sim_IF_discharge(plant, T_ff_sys, T_rf_sys, T_rf_sto, Q):
     if model.lin_dep or model.res[-1] > 1e-3:
         err = True
         m_sto = 0
+        Q_sto = 0
+        Q_sys = 0
+        P_IF = 0
+        TI_IF = 0
 
     return Q_sto, Q_sys, P_IF, TI_IF, T_ff_sto, T_rf_sto, m_sto, err
 
@@ -399,6 +411,7 @@ def sim_IF_charge(plant, T_rf_sys, T_rf_sto, Q, ttd, T_ff_sto_max):
         Indicates whether an error occurred in calculation.
     """
     model = plant.instance
+    model.imp_busses[plant.model_data['heat_bus_sys']].set_attr(P=np.nan)
 
     if T_ff_sto_max < T_rf_sys - ttd:
         T_ff_sto = T_ff_sto_max
@@ -406,7 +419,6 @@ def sim_IF_charge(plant, T_rf_sys, T_rf_sto, Q, ttd, T_ff_sto_max):
         T_ff_sto = T_rf_sys - ttd
 
     # specify system parameters
-    model.imp_busses[plant.model_data['heat_bus_sys']].set_attr(P=np.nan)
     model.imp_busses[plant.model_data['heat_bus_sys']].set_attr(P=Q)
     model.imp_conns[plant.model_data['rf_sys']].set_attr(T=T_rf_sys)
     model.imp_conns[plant.model_data['rf_sto']].set_attr(T=T_rf_sto)
@@ -430,14 +442,16 @@ def sim_IF_charge(plant, T_rf_sys, T_rf_sto, Q, ttd, T_ff_sto_max):
                 model.solve('offdesign', design_path=design, init_path=init)
         else:
             try:
-                model.solve('offdesign', design_path=design, init_path=design)
+                model.solve('offdesign', design_path=design)
                 if model.lin_dep or model.res[-1] > 1e-3:
                     raise TESPyNetworkError
 
             except (TESPyNetworkError, ValueError):
                 model.solve('offdesign', design_path=design, init_path=design)
 
-    except ValueError:
+        if model.lin_dep or model.res[-1] > 1e-3:
+            raise TESPyNetworkError
+    except (TESPyNetworkError, ValueError):
         model.lin_dep = True
         conn = model.imp_conns[plant.model_data['limiting_mass_flow']]
         conn.m.val_SI = conn.m.design
@@ -449,16 +463,18 @@ def sim_IF_charge(plant, T_rf_sys, T_rf_sto, Q, ttd, T_ff_sto_max):
 
     if m > m_max:
         model.imp_busses[plant.model_data['heat_bus_sys']].set_attr(P=np.nan)
-        conn.set_attr(m=m_max)
-        model.solve('offdesign', design_path=design)
+        m_range = np.linspace(m_max, m, num=3, endpoint=False)
+        for m_val in m_range[::-1]:
+            conn.set_attr(m=m_val)
+            model.solve('offdesign', design_path=design)
         msg = ('Limiting heat flow due to mass flow restriction in '
-               'extraction plant: mass flow: ' + str(round(m, 2)) +
+               'injection plant: mass flow: ' + str(round(m, 2)) +
                'kg/s; maximum mass flow: ' + str(round(m_max, 2)) + 'kg/s.')
         logging.warning(msg)
 
     elif m < m_min:
         msg = ('Shutting off plant due to mass flow restriction in '
-               'extraction plant: mass flow: ' + str(round(m, 2)) +
+               'injection plant: mass flow: ' + str(round(m, 2)) +
                'kg/s; minimum mass flow: ' + str(round(m_min, 2)) + 'kg/s.')
         logging.warning(msg)
 
@@ -482,5 +498,9 @@ def sim_IF_charge(plant, T_rf_sys, T_rf_sto, Q, ttd, T_ff_sto_max):
     if model.lin_dep or model.res[-1] > 1e-3:
         err = True
         m_sto = 0
+        Q_sto = 0
+        Q_sys = 0
+        P_IF = 0
+        TI_IF = 0
 
     return Q_sto, Q_sys, P_IF, TI_IF, T_ff_sto, T_rf_sto, m_sto, err

@@ -97,9 +97,11 @@ class model:
                             init_path=self.new_design)
 
         # create low load data
-        Q_range = np.linspace(self.model_data['Q_low'], 1, 3)[::-1] * self.model_data['Q_design']
+        Q_range = np.linspace(
+            self.model_data['Q_low'], 1, 3)[::-1] * self.model_data['Q_design']
         for Q in Q_range:
-            self.instance.imp_busses[self.model_data['heat_bus_sys']].set_attr(P=Q)
+            self.instance.imp_busses[
+                self.model_data['heat_bus_sys']].set_attr(P=Q)
 
             self.instance.solve('offdesign', design_path=self.new_design)
         self.instance.save(self.new_design + '_low_Q')
@@ -185,7 +187,8 @@ def calc_interface_params(ppinfo, T_ff_sys, T_rf_sys, T_rf_sto, Q, mode):
 
             # system feed flow temperature as temperature at interface
             # inlet
-            IF_data = sim_IF_charge(plant, T_ff_sys, T_rf_sto, Q, ttd, T_ff_sto_max)
+            IF_data = sim_IF_charge(
+                plant, T_ff_sys, T_rf_sto, Q, ttd, T_ff_sto_max)
 
         return IF_data
 
@@ -308,56 +311,53 @@ def sim_IF_discharge(plant, T_ff_sys, T_rf_sys, T_rf_sto, Q):
 
     except (TESPyNetworkError, ValueError):
         model.lin_dep = True
-        conn = model.imp_conns[plant.model_data['limiting_mass_flow']]
-        conn.m.val_SI = conn.m.design
 
-    conn = model.imp_conns[plant.model_data['limiting_mass_flow']]
-    m_max = conn.m.design * plant.model_data['m_max']
-    m_min = conn.m.design * plant.model_data['m_min']
-    m = conn.m.val_SI
-    if m > m_max:
-        model.imp_busses[plant.model_data['heat_bus_sys']].set_attr(P=np.nan)
-        m_range = np.linspace(m_max, m, num=3, endpoint=False)
-        for m_val in m_range[::-1]:
-            conn.set_attr(m=m_val)
-            model.solve('offdesign', design_path=design)
-        msg = ('Limiting heat flow due to mass flow restriction in '
-               'extraction plant: mass flow: ' + str(round(m, 2)) +
-               'kg/s; maximum mass flow: ' + str(round(m_max, 2)) + 'kg/s.')
-        logging.warning(msg)
-
-    elif m < m_min:
-        msg = ('Shutting off plant due to mass flow restriction in '
-               'extraction plant: mass flow: ' + str(round(m, 2)) +
-               'kg/s; minimum mass flow: ' + str(round(m_min, 2)) + 'kg/s.')
-        logging.warning(msg)
-
-    conn.set_attr(m=np.nan)
-
-    # storage interface temperatures
-    T_ff_sys = model.imp_conns[plant.model_data['ff_sys']].T.val
-    T_ff_sto = model.imp_conns[plant.model_data['ff_sto']].T.val
-    T_rf_sto = model.imp_conns[plant.model_data['rf_sto']].T.val
-
-    # storage mass flow
-    m_sto = model.imp_conns[plant.model_data['ff_sto']].m.val
-
-    # interface transferred energy params
-    Q_sto = model.imp_busses[plant.model_data['heat_bus_sto']].P.val
-    Q_sys = model.imp_busses[plant.model_data['heat_bus_sys']].P.val
-    P_IF = model.imp_busses[plant.model_data['power_bus']].P.val
-    TI_IF = model.imp_busses[plant.model_data['ti_bus']].P.val
-
-    err = False
     if model.lin_dep or model.res[-1] > 1e-3:
-        err = True
-        m_sto = 0
-        Q_sto = 0
-        Q_sys = 0
-        P_IF = 0
-        TI_IF = 0
+        return 0, 0, 0, 0, 0, T_rf_sto, 0, True
 
-    return Q_sto, Q_sys, P_IF, TI_IF, T_ff_sto, T_rf_sto, m_sto, err
+    else:
+        conn = model.imp_conns[plant.model_data['limiting_mass_flow']]
+        m_max = conn.m.design * plant.model_data['m_max']
+        m_min = conn.m.design * plant.model_data['m_min']
+        m = conn.m.val_SI
+        if m > m_max:
+            model.imp_busses[plant.model_data['heat_bus_sys']].set_attr(
+                P=np.nan)
+            m_range = np.linspace(m_max, m, num=3, endpoint=False)
+            for m_val in m_range[::-1]:
+                conn.set_attr(m=m_val)
+                model.solve('offdesign', design_path=design)
+            msg = ('Limiting heat flow due to mass flow restriction in '
+                   'extraction plant: mass flow: ' + str(round(m, 2)) +
+                   'kg/s; maximum mass flow: ' + str(round(m_max, 2)) +
+                    'kg/s.')
+            logging.warning(msg)
+
+        elif m < m_min:
+            msg = ('Shutting off plant due to mass flow restriction in '
+                   'extraction plant: mass flow: ' + str(round(m, 2)) +
+                   'kg/s; minimum mass flow: ' + str(round(m_min, 2)) +
+                    'kg/s.')
+            logging.warning(msg)
+            return 0, 0, 0, 0, 0, T_rf_sto, 0, False
+
+        conn.set_attr(m=np.nan)
+
+        # storage interface temperatures
+        T_ff_sys = model.imp_conns[plant.model_data['ff_sys']].T.val
+        T_ff_sto = model.imp_conns[plant.model_data['ff_sto']].T.val
+        T_rf_sto = model.imp_conns[plant.model_data['rf_sto']].T.val
+
+        # storage mass flow
+        m_sto = model.imp_conns[plant.model_data['ff_sto']].m.val
+
+        # interface transferred energy params
+        Q_sto = model.imp_busses[plant.model_data['heat_bus_sto']].P.val
+        Q_sys = model.imp_busses[plant.model_data['heat_bus_sys']].P.val
+        P_IF = model.imp_busses[plant.model_data['power_bus']].P.val
+        TI_IF = model.imp_busses[plant.model_data['ti_bus']].P.val
+
+    return Q_sto, Q_sys, P_IF, TI_IF, T_ff_sto, T_rf_sto, m_sto, False
 
 
 def sim_IF_charge(plant, T_rf_sys, T_rf_sto, Q, ttd, T_ff_sto_max):
@@ -453,54 +453,51 @@ def sim_IF_charge(plant, T_rf_sys, T_rf_sto, Q, ttd, T_ff_sto_max):
             raise TESPyNetworkError
     except (TESPyNetworkError, ValueError):
         model.lin_dep = True
-        conn = model.imp_conns[plant.model_data['limiting_mass_flow']]
-        conn.m.val_SI = conn.m.design
 
-    conn = model.imp_conns[plant.model_data['limiting_mass_flow']]
-    m_max = conn.m.design * plant.model_data['m_max']
-    m_min = conn.m.design * plant.model_data['m_min']
-    m = conn.m.val_SI
-
-    if m > m_max:
-        model.imp_busses[plant.model_data['heat_bus_sys']].set_attr(P=np.nan)
-        m_range = np.linspace(m_max, m, num=3, endpoint=False)
-        for m_val in m_range[::-1]:
-            conn.set_attr(m=m_val)
-            model.solve('offdesign', design_path=design)
-        msg = ('Limiting heat flow due to mass flow restriction in '
-               'injection plant: mass flow: ' + str(round(m, 2)) +
-               'kg/s; maximum mass flow: ' + str(round(m_max, 2)) + 'kg/s.')
-        logging.warning(msg)
-
-    elif m < m_min:
-        msg = ('Shutting off plant due to mass flow restriction in '
-               'injection plant: mass flow: ' + str(round(m, 2)) +
-               'kg/s; minimum mass flow: ' + str(round(m_min, 2)) + 'kg/s.')
-        logging.warning(msg)
-
-    conn.set_attr(m=np.nan)
-
-    # storage interface temperatures
-    T_ff_sys = model.imp_conns[plant.model_data['ff_sys']].T.val
-    T_ff_sto = model.imp_conns[plant.model_data['ff_sto']].T.val
-    T_rf_sto = model.imp_conns[plant.model_data['rf_sto']].T.val
-
-    # storage mass flow
-    m_sto = model.imp_conns[plant.model_data['ff_sto']].m.val
-
-    # interface transferred energy params
-    Q_sto = model.imp_busses[plant.model_data['heat_bus_sto']].P.val
-    Q_sys = model.imp_busses[plant.model_data['heat_bus_sys']].P.val
-    P_IF = model.imp_busses[plant.model_data['power_bus']].P.val
-    TI_IF = model.imp_busses[plant.model_data['ti_bus']].P.val
-
-    err = False
     if model.lin_dep or model.res[-1] > 1e-3:
-        err = True
-        m_sto = 0
-        Q_sto = 0
-        Q_sys = 0
-        P_IF = 0
-        TI_IF = 0
+        return 0, 0, 0, 0, 0, T_rf_sto, 0, True
 
-    return Q_sto, Q_sys, P_IF, TI_IF, T_ff_sto, T_rf_sto, m_sto, err
+    else:
+        conn = model.imp_conns[plant.model_data['limiting_mass_flow']]
+        m_max = conn.m.design * plant.model_data['m_max']
+        m_min = conn.m.design * plant.model_data['m_min']
+        m = conn.m.val_SI
+
+        if m > m_max:
+            model.imp_busses[plant.model_data['heat_bus_sys']].set_attr(
+                P=np.nan)
+            m_range = np.linspace(m_max, m, num=3, endpoint=False)
+            for m_val in m_range[::-1]:
+                conn.set_attr(m=m_val)
+                model.solve('offdesign', design_path=design)
+            msg = ('Limiting heat flow due to mass flow restriction in '
+                   'injection plant: mass flow: ' + str(round(m, 2)) +
+                   'kg/s; maximum mass flow: ' + str(round(m_max, 2)) +
+                    'kg/s.')
+            logging.warning(msg)
+
+        elif m < m_min:
+            msg = ('Shutting off plant due to mass flow restriction in '
+                   'injection plant: mass flow: ' + str(round(m, 2)) +
+                   'kg/s; minimum mass flow: ' + str(round(m_min, 2)) +
+                    'kg/s.')
+            logging.warning(msg)
+            return 0, 0, 0, 0, 0, T_rf_sto, 0, False
+
+        conn.set_attr(m=np.nan)
+
+        # storage interface temperatures
+        T_ff_sys = model.imp_conns[plant.model_data['ff_sys']].T.val
+        T_ff_sto = model.imp_conns[plant.model_data['ff_sto']].T.val
+        T_rf_sto = model.imp_conns[plant.model_data['rf_sto']].T.val
+
+        # storage mass flow
+        m_sto = model.imp_conns[plant.model_data['ff_sto']].m.val
+
+        # interface transferred energy params
+        Q_sto = model.imp_busses[plant.model_data['heat_bus_sto']].P.val
+        Q_sys = model.imp_busses[plant.model_data['heat_bus_sys']].P.val
+        P_IF = model.imp_busses[plant.model_data['power_bus']].P.val
+        TI_IF = model.imp_busses[plant.model_data['ti_bus']].P.val
+
+    return Q_sto, Q_sys, P_IF, TI_IF, T_ff_sto, T_rf_sto, m_sto, False

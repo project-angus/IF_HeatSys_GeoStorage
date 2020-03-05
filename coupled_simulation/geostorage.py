@@ -111,9 +111,6 @@ class GeoStorage:
     def __init__(self, cd):
         info('GEOSTORAGE Reading input file .geostorage_ctr.json')
         base_path = cd.working_dir + cd.geostorage_path
-        print('+'*100)
-        print(base_path)
-        print('+'*100)
         path = (base_path + cd.scenario + '.geostorage_ctrl.json')
         print("PATH: {}".format(path))
         self.__specification = dict()

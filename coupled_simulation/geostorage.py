@@ -4,6 +4,7 @@ from logging import info, error
 from json import load
 from subprocess import call
 from abc import ABC, abstractmethod
+from tespy.tools.helpers import modify_path_os
 
 
 class GeoStorageSimulator(ABC):
@@ -37,7 +38,7 @@ class OgsKb1(GeoStorageSimulator):
         density = 1000.
 
         directory = os.path.dirname(self.__data['simulation_files'])
-        basename =  os.path.basename(self.__data['simulation_files'])
+        basename = os.path.basename(self.__data['simulation_files'])
 
         flow_rate = max(1.e-6,  # for eskilson
                            m_sto / (density * int(self.__data['number_of_storages'])))
@@ -67,7 +68,6 @@ class OgsKb1(GeoStorageSimulator):
         else:
             raise RuntimeError("Preprocess - Storage type unknown")
 
-
     def run(self):
         """
         - call geostorage simulator after file preparation
@@ -80,7 +80,6 @@ class OgsKb1(GeoStorageSimulator):
              stderr=open(os.path.dirname(self.__data['simulation_files']) + '/error.txt'))
         info('GEOSTORAGE calculation completed')
 
-
     def postprocess(self, storage_mode):
         """
         evaluate result
@@ -88,7 +87,7 @@ class OgsKb1(GeoStorageSimulator):
         :return: return flow temperature from geostorage
         """
         directory = os.path.dirname(self.__data['simulation_files'])
-        basename =  os.path.basename(self.__data['simulation_files'])
+        basename = os.path.basename(self.__data['simulation_files'])
 
         if self.__data['storage_type'] == 'ATES':
             well = 'COLD' if storage_mode == 'charging' else 'WARM'
@@ -111,11 +110,22 @@ class OgsKb1(GeoStorageSimulator):
 class GeoStorage:
     def __init__(self, cd):
         info('GEOSTORAGE Reading input file .geostorage_ctr.json')
-        path = (cd.working_dir + cd.geostorage_path + cd.scenario + '.geostorage_ctrl.json')
+        base_path = cd.working_dir + cd.geostorage_path
+        print('+'*100)
+        print(base_path)
+        print('+'*100)
+        path = (base_path + cd.scenario + '.geostorage_ctrl.json')
         print("PATH: {}".format(path))
         self.__specification = dict()
         with open(path) as file:
             self.__specification.update(load(file))
+
+        self.__specification['simulator_file'] = modify_path_os(self.__specification['simulator_file'])
+        self.__specification['simulation_files'] = modify_path_os(self.__specification['simulation_files'])
+        if self.__specification['simulator_file'][0] == '.':
+            self.__specification['simulator_file'] = base_path + self.__specification['simulator_file']
+        if self.__specification['simulation_files'][0] == '.':
+            self.__specification['simulation_files'] = base_path + self.__specification['simulation_files']
 
         if self.__specification['simulator_name'] == 'ogs_kb1':
             info('GEOSTORAGE simulator is OGS_kb1')
@@ -139,7 +149,6 @@ class GeoStorage:
 
     def run_storage_simulation(self, T_ff_sto, m_sto, storage_mode):
         """
-
         :param T_ff_sto: (float) feed flow temperature to geostorage
         :param m_sto: (float) mass flow rate through heat exchanger at geostorage side
         :param storage_mode: (str) 'charging' or 'discharging'

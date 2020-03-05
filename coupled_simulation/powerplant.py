@@ -581,7 +581,7 @@ def sim_IF_charge(plant, T_rf_sys, T_rf_sto, Q, ttd, T_ff_sto_max):
     return Q_sto, Q_sys, P_IF, TI_IF, T_ff_sto, T_rf_sto, m_sto, False
 
 
-def sim_IF_discharge(plant, T_ff_sys, T_rf_sys, T_rf_sto, m):
+def sim_IF_discharge_limitation(plant, T_ff_sys, T_rf_sys, T_rf_sto, m):
     """
     Calculate the operation of the interface plant (e. g. heat exchanger or
     heat pump) without temperature restirctions.
@@ -641,6 +641,7 @@ def sim_IF_discharge(plant, T_ff_sys, T_rf_sys, T_rf_sto, m):
 
     # solving
     try:
+        design = plant.new_design
         try:
             model.solve('offdesign', design_path=design)
             if model.lin_dep or model.res[-1] > 1e-3:

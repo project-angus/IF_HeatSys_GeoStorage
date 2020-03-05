@@ -134,6 +134,8 @@ class CoupledModel:
             storage_mode = 'shutin'
 
         Q = Q_target
+        gs_belowMinumumTemperature = False # for power plant model !!!!!!!!!!
+ 
         # iteration
         for iter in range(self.__prop.iter_max):
             info('---------------------------------------------------')
@@ -154,7 +156,8 @@ class CoupledModel:
                 if storage_mode != 'shutin':
                     info('POWERPLANT calculation completed')
                     # geostorage
-                    T_rf_sto_geo = self.__gs.run_storage_simulation(T_ff_sto, m_sto, storage_mode)
+                    T_rf_sto_geo, gs_belowMinimumTemperature = self.__gs.run_storage_simulation(T_ff_sto, m_sto, storage_mode)
+
                     # evaluate
                     info('GEOSTORAGE return temperature: {}'.format(T_rf_sto_geo))
 

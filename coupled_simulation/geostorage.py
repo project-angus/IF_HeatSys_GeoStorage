@@ -134,6 +134,10 @@ class GeoStorage:
             error('GEOSTORAGE simulator not supported')
             self.__simulator = None
         # print(self.__specification)
+ 
+        self.__flag_belowMinimumTemperature = False
+        self.__T_min = float(self.__specification['minimum_discharge_temperature'])
+
 
     def simulation_files(self):
         return self.__specification['simulation_files']
@@ -156,4 +160,19 @@ class GeoStorage:
 
         T_rf_sto = self.__simulator.postprocess(storage_mode)
 
-        return T_rf_sto
+        if T_rf_sto < self.__T_min and self.__flag_belowMinimumTemperature == False:
+            info("GEOSTORAGE Discharge below minimum temperature")
+            self.__flag_belowMinimumTemperature = True
+
+        if self.__flag_belowMinimumTemperature:
+            T_diff = T_rf_sto - self.__T_min
+            info("T_diff: {} - T_rf_sto: {} - m_sto: {}".format(T_diff, T_rf_sto, m_sto))
+
+            if T_diff < -0.01:
+                self.run_storage_simulation(T_ff_sto, m_sto/(1 - 0.5 * T_diff), storage_mode)
+            elif T_diff > 0.01:
+                self.run_storage_simulation(T_ff_sto, m_sto*(1 + 0.5 * T_diff), storage_mode)
+            else:
+                info("GEOSTORAGE Inner iteration converged")
+
+        return T_rf_sto, self.__flag_belowMinimumTemperature

@@ -89,7 +89,7 @@ class OgsKb1(GeoStorageSimulator):
         """
         directory = os.path.dirname(self.__data['simulation_files'])
         basename =  os.path.basename(self.__data['simulation_files'])
-        
+
         if self.__data['storage_type'] == 'ATES':
             well = 'COLD' if storage_mode == 'charging' else 'WARM'
             try:
@@ -100,7 +100,7 @@ class OgsKb1(GeoStorageSimulator):
                 t_rf_sto = None
         elif self.__data['storage_type'] == 'BTES':
             with open('{}/{}_HEAT_TRANSPORT_Contraflow_0.tec'.format(directory, basename)) as file:
-                line = file.readlines()[1] 
+                line = file.readlines()[1]
                 t_rf_sto = float(line.split()[2])
         else:
             raise RuntimeError("Postprocess - Storage type unknown")
@@ -130,12 +130,6 @@ class GeoStorage:
 
     def simulation_files(self):
         return self.__specification['simulation_files']
-
-    def breakpoints(self):
-        return self.__specification['breakpoints']
-
-    def vtk_output(self):
-        return self.__specification['vtk_output']
 
     def output_points(self):
         return self.__specification['output_points']

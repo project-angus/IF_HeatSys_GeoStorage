@@ -10,5 +10,6 @@
 	"iter_min": 1,
 	"iter_max": 10,
 	"temperature_return_error": 0.01,
-	"save_nth_t_step": 50
+	"save_nth_t_step": 40,
+	"save_debug_nth_t_step": 40
 }

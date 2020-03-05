@@ -197,14 +197,14 @@ class CoupledModel:
         try:
             os.system('rm {}/testCase0000.vtk'.format(os.path.dirname(self.__gs.simulation_files())))
 
-            if t_step in self.__gs.vtk_output():
+            if t_step % self.__prop.save_nth_t_step == 0:
                 info('Store vtk')
                 os.system('cp {}/testCase0001.vtk {}/testCase{}.vtk'.format(os.path.dirname(self.__gs.simulation_files()),
                     os.path.dirname(self.__gs.simulation_files()), '000{}'.format(t_step)[-4:]))
             else:
                 os.system('rm {}/testCase0001.vtk'.format(os.path.dirname(self.__gs.simulation_files())))
 
-            if t_step in self.__gs.breakpoints():
+            if t_step % self.__prop.save_debug_nth_t_step == 0:
                 info('BREAKPOINT - store geostorage results')
                 os.system('cp {}_HEAT_TRANSPORT_domain_primary_variables.txt {}/HEAT_TRANSPORT_{}.IC'.format(
                     self.__gs.simulation_files(), os.path.dirname(self.__gs.simulation_files()), t_step))
@@ -226,5 +226,9 @@ class CoupledModel:
                 file.close()
         except:
             pass
+
+        if t_step % self.__prop.save_debug_nth_t_step == 0:
+            self.__pp_info
+
         self.__output_ts.loc[t_step] = np.array([current_time, Q_target, Q_sys, Q_sto, P_plant, ti_plant,
                                                  T_ff_sys, T_rf_sys, T_ff_sto, T_rf_sto, m_sto, pp_err])

@@ -1,6 +1,6 @@
 import numpy as np
 import os
-from logging import info, error
+from logging import debug, info, error
 from json import load
 from subprocess import call
 from abc import ABC, abstractmethod
@@ -134,7 +134,7 @@ class GeoStorage:
             error('GEOSTORAGE simulator not supported')
             self.__simulator = None
         # print(self.__specification)
- 
+
         self.__flag_belowMinimumTemperature = False
         self.__T_min = float(self.__specification['minimum_discharge_temperature'])
 
@@ -161,12 +161,12 @@ class GeoStorage:
         T_rf_sto = self.__simulator.postprocess(storage_mode)
 
         if T_rf_sto < self.__T_min and self.__flag_belowMinimumTemperature == False:
-            info("GEOSTORAGE Discharge below minimum temperature")
+            debug("GEOSTORAGE Discharge below minimum temperature")
             self.__flag_belowMinimumTemperature = True
 
         if self.__flag_belowMinimumTemperature:
             T_diff = T_rf_sto - self.__T_min
-            info("T_diff: {} - T_rf_sto: {} - m_sto: {}".format(T_diff, T_rf_sto, m_sto))
+            debug("T_diff: {} - T_rf_sto: {} - m_sto: {}".format(T_diff, T_rf_sto, m_sto))
 
             if T_diff < -0.01:
                 self.run_storage_simulation(T_ff_sto, m_sto/(1 - 0.5 * T_diff), storage_mode)
@@ -175,4 +175,4 @@ class GeoStorage:
             else:
                 info("GEOSTORAGE Inner iteration converged")
 
-        return T_rf_sto, self.__flag_belowMinimumTemperature
+        return T_rf_sto, self.__flag_belowMinimumTemperature, m_sto

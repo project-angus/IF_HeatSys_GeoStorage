@@ -353,7 +353,7 @@ def sim_IF_discharge(plant, T_ff_sys, T_rf_sys, T_rf_sto, Q):
     # specify system parameters
     model.imp_busses[plant.model_data['heat_bus_sys']].set_attr(P=np.nan)
     model.imp_conns[plant.model_data['rf_sys']].set_attr(T=T_rf_sys)
-    model.imp_conns[plant.model_data['rf_sto']].set_attr(T=T_rf_sto)
+    model.imp_conns[plant.model_data['rf_sto']].set_attr(T=T_rf_sto, m=np.nan)
     model.imp_conns[plant.model_data['ff_sto']].set_attr(T=np.nan)
     model.imp_conns[plant.model_data['ff_sys']].set_attr(
             m=np.nan, T=T_ff_sys, design=[])
@@ -699,5 +699,7 @@ def sim_IF_discharge_limitation(plant, T_ff_sys, T_rf_sys, T_rf_sto, m):
     Q_sys = model.imp_busses[plant.model_data['heat_bus_sys']].P.val
     P_IF = model.imp_busses[plant.model_data['power_bus']].P.val
     TI_IF = model.imp_busses[plant.model_data['ti_bus']].P.val
+
+    model.imp_conns[plant.model_data['rf_sto']].set_attr(m=np.nan)
 
     return Q_sto, Q_sys, P_IF, TI_IF, T_ff_sto, T_rf_sto, m_sto, False

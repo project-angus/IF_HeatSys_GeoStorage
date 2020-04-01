@@ -1,6 +1,6 @@
 import numpy as np
 import datetime
-import os
+import os, shutil
 from logging import info, error
 from pandas import DataFrame, read_csv
 
@@ -20,8 +20,11 @@ class CoupledModel:
         self.__gs = GeoStorage(self.__prop)
         self.__pp_info = pp.load_models(self.__prop)
 
+        self.__directory = os.path.dirname(self.__gs.simulation_files())
+        self.__basename = os.path.basename(self.__gs.simulation_files())
+
         info('INTERFACE powerplant models loaded')
-        self.__input_ts = read_csv(self.__prop.working_dir + self.__prop.input_timeseries_file,
+        self.__input_ts = read_csv(os.path.join(self.__prop.working_dir, self.__prop.input_timeseries_file),
                                       delimiter=',', decimal='.')
 
         info('INTERFACE Input time series read')
@@ -38,17 +41,19 @@ class CoupledModel:
         :return: initial return temperature from storage for power plants
         """
         try:
-            os.system('cp {}/_HEAT_TRANSPORT.IC {}_HEAT_TRANSPORT_domain_primary_variables.txt'.format(
-                os.path.dirname(self.__gs.simulation_files()), self.__gs.simulation_files()))
+            shutil.copy(os.path.join(self.__directory, '_HEAT_TRANSPORT.IC'),
+                        os.path.join(self.__directory,
+                                     self.__basename + '_HEAT_TRANSPORT_domain_primary_variables.txt'))
             if self.__gs.storage_type() == 'ATES':
-                os.system('cp {}/_LIQUID_FLOW.IC {}_LIQUID_FLOW_domain_primary_variables.txt'.format(
-                    os.path.dirname(self.__gs.simulation_files()), self.__gs.simulation_files()))
+                shutil.copy(os.path.join(self.__directory, '_LIQUID_FLOW.IC'),
+                            os.path.join(self.__directory,
+                                         self.__basename + '_LIQUID_FLOW_domain_primary_variables.txt'))
         except:
             pass
 
         info('INTERFACE time stepping prepared')
 
-        return 40, 30
+        return 40, 30  # INITIALIZATION
 
     def execute(self):
         """
@@ -87,9 +92,10 @@ class CoupledModel:
                                    T_rf_sys, T_ff_sto, T_rf_sto, m_sto, pp_err)
 
             if t_step % self.__prop.save_nth_t_step == 0:
-                self.__output_ts.to_csv(self.__prop.working_dir + self.__prop.output_timeseries_path, index=False)
+                self.__output_ts.to_csv(
+                    os.path.join(self.__prop.working_dir, self.__prop.output_timeseries_path), index=False)
 
-        self.__output_ts.to_csv(self.__prop.working_dir + self.__prop.output_timeseries_path, index=False)
+        self.__output_ts.to_csv(os.path.join(self.__prop.working_dir, self.__prop.output_timeseries_path), index=False)
         print(self.__output_ts)
 
     def get_timestep_data(self, current_time):
@@ -104,11 +110,13 @@ class CoupledModel:
             T_ff_sys = float(self.__input_ts.loc[self.__input_ts.time == current_time, 'temperature_feed'].values[0])
             T_rf_sys = float(self.__input_ts.loc[self.__input_ts.time == current_time, 'temperature_return'].values[0])
 
-            os.system('cp {}_HEAT_TRANSPORT_domain_primary_variables.txt {}/HEAT_TRANSPORT.IC'.format(
-                self.__gs.simulation_files(), os.path.dirname(self.__gs.simulation_files())))
+            shutil.copy(os.path.join(self.__directory,
+                                     self.__basename + '_HEAT_TRANSPORT_domain_primary_variables.txt'),
+                        os.path.join(self.__directory, 'HEAT_TRANSPORT.IC'))
             if self.__gs.storage_type() == 'ATES':
-                os.system('cp {}_LIQUID_FLOW_domain_primary_variables.txt {}/LIQUID_FLOW.IC'.format(
-                    self.__gs.simulation_files(), os.path.dirname(self.__gs.simulation_files())))
+                shutil.copy(os.path.join(self.__directory,
+                                     self.__basename + '_LIQUID_FLOW_domain_primary_variables.txt'),
+                            os.path.join(self.__directory, 'LIQUID_FLOW.IC'))
         except KeyError:
             Q_target, T_ff_sys, T_rf_sys, p_ff_sys, p_rf_sys = None, None, None, None, None
             error('INTERFACE time step not found in input data')
@@ -134,7 +142,7 @@ class CoupledModel:
             storage_mode = 'shutin'
 
         Q = Q_target
-        gs_belowMinumumTemperature = False # for power plant model !!!!!!!!!!
+        gs_belowMinumumTemperature = False  # for power plant model !!!!!!!!!!
  
         # iteration
         for iter in range(self.__prop.iter_max):
@@ -145,24 +153,23 @@ class CoupledModel:
                 if abs(Q) > 1e-3:
                     Q_sto, Q_sys, P_plant, ti_plant, T_ff_sto, T_rf_sto, m_sto, pp_err = pp.calc_interface_params(
                         self.__pp_info, T_ff_sys, T_rf_sys, T_rf_sto, abs(Q), storage_mode)
-
                 else:
                     Q_sto, Q_sys, P_plant, ti_plant, T_ff_sto, T_rf_sto, m_sto, pp_err = \
                         0, 0, 0, 0, 0, T_rf_sto, 0, False
 
+                #Q_sto, Q_sys, P_plant, ti_plant, T_ff_sto, T_rf_sto, m_sto, pp_err = pp.calc_interface_params(
+                #    self.__pp_info, T_ff_sys, T_rf_sys, T_rf_sto, abs(Q), storage_mode) if abs(Q) > 1e-3 else 0, 0, 0, 0, 0, T_rf_sto, 0, False
+
                 if m_sto == 0:
                     storage_mode = 'shutin'
-
-                if storage_mode != 'shutin':
+                    T_rf_sto_geo = T_rf_sto
+                else:
                     info('POWERPLANT calculation completed')
                     # geostorage
-                    T_rf_sto_geo, gs_belowMinimumTemperature = self.__gs.run_storage_simulation(T_ff_sto, m_sto, storage_mode)
-
+                    T_rf_sto_geo, gs_belowMinimumTemperature = self.__gs.run_storage_simulation(
+                        T_ff_sto, m_sto, storage_mode)
                     # evaluate
                     info('GEOSTORAGE return temperature: {}'.format(T_rf_sto_geo))
-
-                else:
-                    T_rf_sto_geo = T_rf_sto
 
                 error = abs(T_rf_sto_geo - T_rf_sto)
                 info('INTERFACE coupling error: {}'.format(error))
@@ -198,41 +205,47 @@ class CoupledModel:
         :return:
         """
         try:
-            os.system('rm {}/testCase0000.vtk'.format(os.path.dirname(self.__gs.simulation_files())))
+            os.remove(os.path.join(self.__directory, self.__basename + '0000.vtk'))
 
             if t_step % self.__prop.save_nth_t_step == 0:
                 info('Store vtk')
-                os.system('cp {}/testCase0001.vtk {}/testCase{}.vtk'.format(os.path.dirname(self.__gs.simulation_files()),
-                    os.path.dirname(self.__gs.simulation_files()), '000{}'.format(t_step)[-4:]))
+                shutil.copy(os.path.join(self.__directory, self.__basename + '0001.vtk'),
+                            os.path.join(self.__directory, self.__basename + '000{}'.format(t_step)[-4:] + '.vtk'))
             else:
-                os.system('rm {}/testCase0001.vtk'.format(os.path.dirname(self.__gs.simulation_files())))
+                os.remove(os.path.join(self.__directory, self.__basename + '0001.vtk'))
 
             if t_step % self.__prop.save_debug_nth_t_step == 0:
                 info('BREAKPOINT - store geostorage results')
-                os.system('cp {}_HEAT_TRANSPORT_domain_primary_variables.txt {}/HEAT_TRANSPORT_{}.IC'.format(
-                    self.__gs.simulation_files(), os.path.dirname(self.__gs.simulation_files()), t_step))
+
+                shutil.copy(os.path.join(self.__directory,
+                                         self.__basename + '_HEAT_TRANSPORT_domain_primary_variables.txt'),
+                            os.path.join(self.__directory, 'HEAT_TRANSPORT_{}.IC'.format(t_step)))
+
                 if self.__gs.storage_type() == 'ATES':
-                    os.system('cp {}_LIQUID_FLOW_domain_primary_variables.txt {}/LIQUID_FLOW_{}.IC'.format(
-                        self.__gs.simulation_files(), os.path.dirname(self.__gs.simulation_files()), t_step))
+                    shutil.copy(os.path.join(
+                        self.__directory, self.__basename + '_LIQUID_FLOW_domain_primary_variables.txt'),
+                                os.path.join(self.__directory, 'LIQUID_FLOW_{}.IC'.format(t_step)))
 
             for pnt in self.__gs.output_points():
                 info('{} {}'.format(pnt, t_step))
-                filename = '{}_time_{}.tec'.format(self.__gs.simulation_files(), pnt)
-                file = open(filename, 'r')
+
+                file = open(os.path.join(self.__directory, self.__basename + '_time_{}.tec'.format(pnt)), 'r')
                 for line in file:
                     w = line
                 file.close()
 
-                argument = 'w' if t_step == 0 else 'a'
-                file = open('{}_point_{}.txt'.format(self.__gs.simulation_files(), pnt), argument)
+                file = open(os.path.join(self.__directory, self.__basename + '_point_{}.txt'.format(pnt)),
+                            'w' if t_step == 0 else 'a')
                 file.write('{}\t{}\n'.format(t_step * self.__prop.t_step_length, w.split()[-1]))
                 file.close()
         except:
             pass
 
         if t_step % self.__prop.save_debug_nth_t_step == 0:
-            self.__pp_info['power_plant_models'][self.__pp_info['discharge']['name']]['plant'].instance.save(self.__prop.working_dir + 'pp_discharging_' + str(t_step))
-            self.__pp_info['power_plant_models'][self.__pp_info['charge']['name']]['plant'].instance.save(self.__prop.working_dir + 'pp_charging_' + str(t_step))
+            self.__pp_info['power_plant_models'][self.__pp_info['discharge']['name']]['plant'].instance.save(
+                os.path.join(self.__prop.working_dir, 'pp_discharging_' + str(t_step)))
+            self.__pp_info['power_plant_models'][self.__pp_info['charge']['name']]['plant'].instance.save(
+                os.path.join(self.__prop.working_dir, 'pp_charging_' + str(t_step)))
 
         self.__output_ts.loc[t_step] = np.array([current_time, Q_target, Q_sys, Q_sto, P_plant, ti_plant,
                                                  T_ff_sys, T_rf_sys, T_ff_sto, T_rf_sto, m_sto, pp_err])

@@ -1,10 +1,19 @@
-import numpy as np
 import os
+from shutil import copy
+
+from pathlib import Path
 from logging import info, error
 from json import load
 from subprocess import call
 from abc import ABC, abstractmethod
 from tespy.tools.helpers import modify_path_os
+
+import fileinput
+
+def replace(filename, text_to_search, replacement_text):
+    with fileinput.FileInput(filename, inplace=True, backup='.bak') as file:
+        for line in file:
+            print(line.replace(text_to_search, replacement_text), end='')
 
 
 class GeoStorageSimulator(ABC):
@@ -46,25 +55,32 @@ class OgsKb1(GeoStorageSimulator):
         if self.__data['storage_type'] == 'ATES':
             if storage_mode == 'charging':
                 # ST
-                os.system("sed 's/$WARM/{0}/g' {1}/_{2}.st > {1}/{2}.st".format(flow_rate, directory, basename))
-                os.system("sed -i 's/$COLD/{}/g' {}/{}.st".format(-m_sto / density, directory, basename))
+                copy(os.path.join(directory, '_' + basename + '.st'), os.path.join(directory, basename + '.st'))
+                replace(os.path.join(directory, basename + '.st'), "$WARM", str(flow_rate))
+                replace(os.path.join(directory, basename + '.st'), "$COLD", str(-m_sto / density))
                 # BC
-                os.system("sed 's/$TYPE/WARM/g' {0}/_{1}.bc > {0}/{1}.bc".format(directory, basename))
-                os.system("sed -i 's/$VALUE/{}/g' {}/{}.bc".format(T_ff_sto, directory, basename))
+                copy(os.path.join(directory, '_' + basename + '.bc'), os.path.join(directory, basename + '.bc'))
+                replace(os.path.join(directory, basename + '.bc'), "$TYPE", "WARM")
+                replace(os.path.join(directory, basename + '.bc'), "$VALUE", str(T_ff_sto))
 
             elif storage_mode == 'discharging':
                 # ST
-                os.system("sed 's/$WARM/{0}/g' {1}/_{2}.st > {1}/{2}.st".format(-flow_rate, directory, basename))
-                os.system("sed -i 's/$COLD/{}/g' {}/{}.st".format(m_sto / density, directory, basename))
+                copy(os.path.join(directory, '_' + basename + '.st'), os.path.join(directory, basename + '.st'))
+                replace(os.path.join(directory, basename + '.st'), "$WARM", str(-flow_rate))
+                replace(os.path.join(directory, basename + '.st'), "$COLD", str(m_sto / density))
                 # BC
-                os.system("sed 's/$TYPE/COLD/g' {0}/_{1}.bc > {0}/{1}.bc".format(directory, basename))
-                os.system("sed -i 's/$VALUE/{}/g' {}/{}.bc".format(T_ff_sto, directory, basename))
+                copy(os.path.join(directory, '_' + basename + '.bc'), os.path.join(directory, basename + '.bc'))
+                replace(os.path.join(directory, basename + '.bc'), "$TYPE", "COLD")
+                replace(os.path.join(directory, basename + '.bc'), "$VALUE", str(T_ff_sto))
 
         elif self.__data['storage_type'] == 'BTES':
             info('GEOSTORAGE flow rate: {}'.format(flow_rate))
             info('GEOSTORAGE inflow temperature: {}'.format(T_ff_sto))
-            os.system("sed 's/$FLOW_RATE/{0}/g' {1}/_{2}.st > {1}/{2}.st".format(flow_rate, directory, basename))
-            os.system("sed -i 's/$INFLOW_TEMPERATURE/{}/g' {}/{}.st".format(T_ff_sto, directory, basename))
+
+            copy(os.path.join(directory, '_' + basename + '.st'), os.path.join(directory, basename + '.st'))
+            replace(os.path.join(directory, basename + '.st'), "$FLOW_RATE", str(flow_rate))
+            replace(os.path.join(directory, basename + '.st'), "$INFLOW_TEMPERATURE", str(T_ff_sto))
+
         else:
             raise RuntimeError("Preprocess - Storage type unknown")
 
@@ -73,11 +89,12 @@ class OgsKb1(GeoStorageSimulator):
         - call geostorage simulator after file preparation
         :return:
         """
-        os.system('touch {}'.format(os.path.dirname(self.__data['simulation_files']) + '/out.txt'))  # file must exist
-        os.system('touch {}'.format(os.path.dirname(self.__data['simulation_files']) + '/error.txt'))  # file must exist
+        Path(os.path.join(os.path.dirname(self.__data['simulation_files']), 'out.txt')).touch()
+        Path(os.path.join(os.path.dirname(self.__data['simulation_files']), 'error.txt')).touch()
+
         call([self.__data['simulator_file'], self.__data['simulation_files']],
-             stdout=open(os.path.dirname(self.__data['simulation_files']) + '/out.txt'),
-             stderr=open(os.path.dirname(self.__data['simulation_files']) + '/error.txt'))
+             stdout=open(os.path.join(os.path.dirname(self.__data['simulation_files']), 'out.txt')),
+             stderr=open(os.path.join(os.path.dirname(self.__data['simulation_files']), 'error.txt')))
         info('GEOSTORAGE calculation completed')
 
     def postprocess(self, storage_mode):
@@ -92,13 +109,13 @@ class OgsKb1(GeoStorageSimulator):
         if self.__data['storage_type'] == 'ATES':
             well = 'COLD' if storage_mode == 'charging' else 'WARM'
             try:
-                with open('{}/{}_time_{}.tec'.format(directory, basename, well)) as file:
+                with open(os.path.join(directory, basename + '_time_' + well + '.tec')) as file:
                     line = file.readlines()[4]
                     t_rf_sto = float(line.split()[1])
             except:
                 t_rf_sto = None
         elif self.__data['storage_type'] == 'BTES':
-            with open('{}/{}_HEAT_TRANSPORT_Contraflow_0.tec'.format(directory, basename)) as file:
+            with open(os.path.join(directory, basename + '_HEAT_TRANSPORT_Contraflow_0.tec')) as file:
                 line = file.readlines()[1]
                 t_rf_sto = float(line.split()[2])
         else:
@@ -110,9 +127,9 @@ class OgsKb1(GeoStorageSimulator):
 class GeoStorage:
     def __init__(self, cd):
         info('GEOSTORAGE Reading input file .geostorage_ctr.json')
-        base_path = cd.working_dir + cd.geostorage_path
-        path = (base_path + cd.scenario + '.geostorage_ctrl.json')
-        print("PATH: {}".format(path))
+        base_path = os.path.join(cd.working_dir, cd.geostorage_path)
+        path = os.path.join(base_path, cd.scenario + '.geostorage_ctrl.json')
+        # print("PATH: {}".format(path))
         self.__specification = dict()
         with open(path) as file:
             self.__specification.update(load(file))

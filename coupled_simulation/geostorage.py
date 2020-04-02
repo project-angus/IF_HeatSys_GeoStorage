@@ -91,10 +91,12 @@ class OgsKb1(GeoStorageSimulator):
         """
         Path(os.path.join(os.path.dirname(self.__data['simulation_files']), 'out.txt')).touch()
         Path(os.path.join(os.path.dirname(self.__data['simulation_files']), 'error.txt')).touch()
-
-        call([self.__data['simulator_file'], self.__data['simulation_files']],
-             stdout=open(os.path.join(os.path.dirname(self.__data['simulation_files']), 'out.txt')),
-             stderr=open(os.path.join(os.path.dirname(self.__data['simulation_files']), 'error.txt')))
+        try:
+            call([self.__data['simulator_file'], self.__data['simulation_files']],
+                stdout=open(os.path.join(os.path.dirname(self.__data['simulation_files']), 'out.txt')),
+                stderr=open(os.path.join(os.path.dirname(self.__data['simulation_files']), 'error.txt')))
+        except:
+            error("Call of storage simulator failed")
         info('GEOSTORAGE calculation completed')
 
     def postprocess(self, storage_mode):

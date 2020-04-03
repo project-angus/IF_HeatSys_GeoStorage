@@ -167,12 +167,20 @@ def calc_interface_params(ppinfo, T_ff_sys, T_rf_sys, T_rf_sto, Q, mode):
         ttd_restriction = ppinfo['charge']['restricted']
         plant = ppinfo['power_plant_models'][charge]['plant']
 
+        if T_ff_sys - T_rf_sto < ppinfo['charge']['dt_min']:
+            msg = ('Temperature difference too low for operation.')
+            logging.warning(msg)
+            T_rf_sto = T_ff_sys - ppinfo['charge']['dt_min'] * 1.25
+            T_ff_sto = T_rf_sto
+            return 0, 0, 0, 0, T_ff_sto, T_rf_sto, 0, False
+
+
         # check for minimum heat transfer
         Q_min = plant.model_data['Q_min'] * plant.model_data['Q_design']
         if Q < Q_min:
             # storage interface plant operation impossible
             msg = ('Target heat extraction rate of ' + str(round(Q, 0)) + ' W '
-                   'below minimum possible heat extraction rate ofF ' +
+                   'below minimum possible heat extraction rate of ' +
                    str(round(Q_min, 0)) + ' W. '
                    'Interface operation impossible.')
             logging.warning(msg)
@@ -189,6 +197,11 @@ def calc_interface_params(ppinfo, T_ff_sys, T_rf_sys, T_rf_sto, Q, mode):
             # inlet
             IF_data = sim_IF_charge(
                 plant, T_ff_sys, T_rf_sto, Q, ttd, T_ff_sto_max)
+
+            if IF_data[-1]:
+                T_rf_sto = T_ff_sys - ppinfo['charge']['dt_min'] * 1.25
+                IF_data = list(IF_data)
+                IF_data = IF_data[0:5] + [T_rf_sto] + IF_data[6:]
 
         return IF_data
 

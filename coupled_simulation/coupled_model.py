@@ -228,7 +228,8 @@ class CoupledModel:
             pass
 
         if t_step % self.__prop.save_debug_nth_t_step == 0:
-            self.__pp_info
+            self.__pp_info['power_plant_models'][self.__pp_info['discharge']['name']]['plant'].instance.save(self.__prop.working_dir + 'pp_discharging_' + str(t_step))
+            self.__pp_info['power_plant_models'][self.__pp_info['charge']['name']]['plant'].instance.save(self.__prop.working_dir + 'pp_charging_' + str(t_step))
 
         self.__output_ts.loc[t_step] = np.array([current_time, Q_target, Q_sys, Q_sto, P_plant, ti_plant,
                                                  T_ff_sys, T_rf_sys, T_ff_sto, T_rf_sto, m_sto, pp_err])

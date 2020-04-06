@@ -31,6 +31,13 @@ class GeoStorageSimulator(ABC):
 class OgsKb1(GeoStorageSimulator):
     def __init__(self, data):
         self.__data = data
+
+        self.__directory = os.path.dirname(data['simulation_files'])
+        self.__basename = os.path.basename(data['simulation_files'])
+
+        self.__distribution = data['distribution']
+        self.__factor = float(data['factor'])
+        self.__density = float(data['density'])
         # print(data)
 
     def preprocess(self, T_ff_sto, m_sto, storage_mode):
@@ -44,57 +51,54 @@ class OgsKb1(GeoStorageSimulator):
         :param storage_mode: (str) 'charging' or 'discharging'
         :return:
         """
-        density = 1000.
 
-        directory = os.path.dirname(self.__data['simulation_files'])
-        basename = os.path.basename(self.__data['simulation_files'])
+        info('GEOSTORAGE inflow temperature: {}'.format(T_ff_sto))
 
-        flow_rate = max(1.e-6,  # for eskilson
-                           m_sto / (density * int(self.__data['number_of_storages'])))
+        for i in range(len(self.__distribution)):
+            flow_rate = max(1.e-6,  # required for eskilson model
+                            self.__factor * float(self.__distribution[i]) *
+                            m_sto / self.__density)
+            info('GEOSTORAGE flow rate {}: {}'.format(i, flow_rate))
 
-        if self.__data['storage_type'] == 'ATES':
-            if storage_mode == 'charging':
-                # ST
-                copy(os.path.join(directory, '_' + basename + '.st'), os.path.join(directory, basename + '.st'))
-                replace(os.path.join(directory, basename + '.st'), "$WARM", str(flow_rate))
-                replace(os.path.join(directory, basename + '.st'), "$COLD", str(-m_sto / density))
-                # BC
-                copy(os.path.join(directory, '_' + basename + '.bc'), os.path.join(directory, basename + '.bc'))
-                replace(os.path.join(directory, basename + '.bc'), "$TYPE", "WARM")
-                replace(os.path.join(directory, basename + '.bc'), "$VALUE", str(T_ff_sto))
+            # ST-FILE
+            st_file = os.path.join(self.__directory, self.__basename + '.st')
 
-            elif storage_mode == 'discharging':
-                # ST
-                copy(os.path.join(directory, '_' + basename + '.st'), os.path.join(directory, basename + '.st'))
-                replace(os.path.join(directory, basename + '.st'), "$WARM", str(-flow_rate))
-                replace(os.path.join(directory, basename + '.st'), "$COLD", str(m_sto / density))
-                # BC
-                copy(os.path.join(directory, '_' + basename + '.bc'), os.path.join(directory, basename + '.bc'))
-                replace(os.path.join(directory, basename + '.bc'), "$TYPE", "COLD")
-                replace(os.path.join(directory, basename + '.bc'), "$VALUE", str(T_ff_sto))
+            copy(os.path.join(self.__directory, '_' + self.__basename + '.st'), st_file)
 
-        elif self.__data['storage_type'] == 'BTES':
-            info('GEOSTORAGE flow rate: {}'.format(flow_rate))
-            info('GEOSTORAGE inflow temperature: {}'.format(T_ff_sto))
+            replace(st_file, "$INFLOW_TEMPERATURE", str(T_ff_sto))
+            # ATES
+            replace(st_file, "$WARM_{}".format(i), str(flow_rate))
+            replace(st_file, "$COLD_{}".format(i), str(-flow_rate))
+            # BTES
+            replace(st_file, "$FLOW_RATE_{}".format(i), str(flow_rate))
 
-            copy(os.path.join(directory, '_' + basename + '.st'), os.path.join(directory, basename + '.st'))
-            replace(os.path.join(directory, basename + '.st'), "$FLOW_RATE", str(flow_rate))
-            replace(os.path.join(directory, basename + '.st'), "$INFLOW_TEMPERATURE", str(T_ff_sto))
+            # BC-FILE
+            # ATES
+            try:
+                bc_file = os.path.join(self.__directory, self.__basename + '.bc')
+                copy(os.path.join(self.__directory, '_' + self.__basename + '.bc'), bc_file)
 
-        else:
-            raise RuntimeError("Preprocess - Storage type unknown")
+                replace(bc_file, "$INFLOW_TEMPERATURE", str(T_ff_sto + 273.15))
+                if storage_mode == 'charging':
+                    replace(bc_file, "$INFLOW_POSITION_{0}".format(i), "WARM_{0}".format(i))
+                elif storage_mode == 'discharging':
+                    replace(bc_file, "$INFLOW_POSITION_{0}".format(i), "COLD_{0}".format(i))
+                else:
+                    raise RuntimeError("Preprocess - Storage operation type unknown")
+            except:
+                pass
 
     def run(self):
         """
         - call geostorage simulator after file preparation
         :return:
         """
-        Path(os.path.join(os.path.dirname(self.__data['simulation_files']), 'out.txt')).touch()
-        Path(os.path.join(os.path.dirname(self.__data['simulation_files']), 'error.txt')).touch()
+        Path(os.path.join(self.__directory, 'out.txt')).touch()
+        Path(os.path.join(self.__directory, 'error.txt')).touch()
         try:
             call([self.__data['simulator_file'], self.__data['simulation_files']],
-                stdout=open(os.path.join(os.path.dirname(self.__data['simulation_files']), 'out.txt')),
-                stderr=open(os.path.join(os.path.dirname(self.__data['simulation_files']), 'error.txt')))
+                stdout=open(os.path.join(self.__directory, 'out.txt')),
+                stderr=open(os.path.join(self.__directory, 'error.txt')))
         except:
             error("Call of storage simulator failed")
         info('GEOSTORAGE calculation completed')
@@ -105,23 +109,23 @@ class OgsKb1(GeoStorageSimulator):
         :param storage_mode: (string) 'charging' or 'discharging'
         :return: return flow temperature from geostorage
         """
-        directory = os.path.dirname(self.__data['simulation_files'])
-        basename = os.path.basename(self.__data['simulation_files'])
 
-        if self.__data['storage_type'] == 'ATES':
-            well = 'COLD' if storage_mode == 'charging' else 'WARM'
+        for i in range(len(self.__distribution)):
             try:
-                with open(os.path.join(directory, basename + '_time_' + well + '.tec')) as file:
-                    line = file.readlines()[4]
-                    t_rf_sto = float(line.split()[1])
+                with open(os.path.join(self.__directory,
+                                       self.__basename + '_HEAT_TRANSPORT_Contraflow_{}.tec'.format(i))) as file:
+                    line = file.readline()
+                    line = file.readlines()[1]
+                    t_rf_sto = float(line.split()[2])
             except:
-                t_rf_sto = None
-        elif self.__data['storage_type'] == 'BTES':
-            with open(os.path.join(directory, basename + '_HEAT_TRANSPORT_Contraflow_0.tec')) as file:
-                line = file.readlines()[1]
-                t_rf_sto = float(line.split()[2])
-        else:
-            raise RuntimeError("Postprocess - Storage type unknown")
+                position = 'PNT_COLD' if storage_mode == 'charging' else 'PNT_WARM'
+                try:
+                    with open(os.path.join(self.__directory, self.__basename + '_time_{}_{}.tec'.format(position, i))) as file:
+                        line = file.readlines()[4]
+                        t_rf_sto = float(line.split()[1]) - 273.15
+                except:
+                    t_fr_sto = None
+                    raise RuntimeError("Postprocess - No output for storage {}".format(i))
 
         return t_rf_sto
 
@@ -147,8 +151,10 @@ class GeoStorage:
             info('GEOSTORAGE simulator is OGS_kb1')
             self.__simulator = OgsKb1({'simulator_file': self.__specification['simulator_file'],
                                         'simulation_files': self.__specification['simulation_files'],
-                                        'storage_type': self.__specification['storage_type'],
-                                        'number_of_storages': self.__specification['number_of_storages']})
+                                       'factor': self.__specification['factor'],
+                                       'distribution': self.__specification['distribution'],
+                                       'density': self.__specification['density']
+                                       })
         else:
             error('GEOSTORAGE simulator not supported')
             self.__simulator = None

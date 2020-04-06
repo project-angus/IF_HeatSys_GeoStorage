@@ -18,7 +18,7 @@ class Properties:
         path = self.working_dir = os.path.abspath(path).strip('.main_ctrl.json')
 
         self.scenario = os.path.basename(path)
-        self.working_dir = os.path.dirname(path) + '/'  # to remove
+        self.working_dir = os.path.dirname(path)  # + '/'  # to remove
         self.t_start = datetime.datetime.strptime(self.t_start, '%Y-%m-%d %H:%M:%S')
 
-        info('Read inputile {}.main_ctrl.json\n    in {}'.format(self.scenario, self.working_dir))
+        info('Read input file {}.main_ctrl.json\n    in {}'.format(self.scenario, self.working_dir))

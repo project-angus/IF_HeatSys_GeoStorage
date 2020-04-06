@@ -194,9 +194,9 @@ class GeoStorage:
             info("T_diff: {} - T_rf_sto: {} - m_sto: {}".format(T_diff, T_rf_sto, m_sto))
 
             if T_diff < -0.01:
-                self.run_storage_simulation(T_ff_sto, m_sto/(1 - 0.5 * T_diff), storage_mode)
+                self.run_storage_simulation(T_ff_sto, m_sto/(1 - 0.2 * T_diff), storage_mode)
             elif T_diff > 0.01:
-                self.run_storage_simulation(T_ff_sto, m_sto*(1 + 0.5 * T_diff), storage_mode)
+                self.run_storage_simulation(T_ff_sto, m_sto*(1 + 0.2 * T_diff), storage_mode)
             else:
                 info("GEOSTORAGE Inner iteration converged")
 

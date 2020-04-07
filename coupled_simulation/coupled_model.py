@@ -178,8 +178,8 @@ class CoupledModel:
                     # evaluate
                     info('GEOSTORAGE return temperature: {}'.format(T_rf_sto_geo))
 
-                else:
-                    T_rf_sto_geo = T_rf_sto
+                #else:
+                #    T_rf_sto_geo = T_rf_sto
 
                 error_T = abs(T_rf_sto_geo - T_rf_sto)
                 error_m = abs(m_sto_geo - m_sto)

@@ -1,12 +1,11 @@
 import os
-from shutil import copy
-
-from pathlib import Path
 from logging import debug, info, error
 from json import load
 from subprocess import call
 from abc import ABC, abstractmethod
 from tespy.tools.helpers import modify_path_os
+from shutil import copy
+from pathlib import Path
 
 import fileinput
 

@@ -9,6 +9,7 @@ Created on Mon Feb 12 15:17:46 2018
 # %% imports
 
 import numpy as np
+import os
 import logging
 from tespy.networks import load_network
 from tespy.tools import logger
@@ -23,7 +24,7 @@ logger.define_logging(log_version=True, file_level=logging.DEBUG,
 
 def load_models(cd):
 
-    power_plant_path = (cd.working_dir + cd.powerplant_path +
+    power_plant_path = os.path.join(cd.working_dir, cd.powerplant_path,
                         cd.scenario + '.powerplant_ctrl.json')
     power_plant_models = {}
     with open(power_plant_path) as f:
@@ -51,7 +52,7 @@ class model:
 
         # load data.json information into objects dictionary (= attributes of
         # the object)
-        self.wdir = cd.working_dir + cd.powerplant_path
+        self.wdir = os.path.join(cd.working_dir, cd.powerplant_path)
         self.sc = cd.scenario
         self.model_data = data
         self.name = name
@@ -63,7 +64,7 @@ class model:
     def load_tespy_model(self):
 
         # load tespy models with the network_reader module
-        self.instance = load_network(self.wdir + self.model_data['path'])
+        self.instance = load_network(os.path.join(self.wdir, self.model_data['path']))
         self.instance.set_attr(
             m_range=self.model_data['m_range'], iterinfo=False)
         if self.model_data['debug'] is True:

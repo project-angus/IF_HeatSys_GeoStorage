@@ -22,7 +22,6 @@ class CoupledModel:
 
         self.__directory = os.path.dirname(self.__gs.simulation_files())
         self.__basename = os.path.basename(self.__gs.simulation_files())
-
         info('INTERFACE powerplant models loaded')
         self.__input_ts = read_csv(os.path.join(self.__prop.working_dir, self.__prop.input_timeseries_file),
                                       delimiter=',', decimal='.')
@@ -138,7 +137,7 @@ class CoupledModel:
         """
         # initialization
         Q = Q_target
-        gs_belowMinumumTemperature = False  # for power plant model !!!!!!!!!!
+        gs_belowMinumumTemperature = False # for power plant model !!!!!!!!!!
  
         # iteration
         for iter in range(self.__prop.iter_max):
@@ -149,6 +148,14 @@ class CoupledModel:
                 if abs(Q) > 1e-3:
                     Q_sto, Q_sys, P_plant, ti_plant, T_ff_sto, T_rf_sto, m_sto, pp_err = pp.calc_interface_params(
                         self.__pp_info, T_ff_sys, T_rf_sys, T_rf_sto, abs(Q), storage_mode)
+
+                    if gs_belowMinumumTemperature is True:
+                        Q_sto, Q_sys, P_plant, ti_plant, T_ff_sto, T_rf_sto, m_sto, pp_err = pp.calc_interface_params_limitation(
+                            self.__pp_info, T_ff_sys, T_rf_sys, T_rf_sto, m_sto, storage_mode)
+
+                    else:
+                        Q_sto, Q_sys, P_plant, ti_plant, T_ff_sto, T_rf_sto, m_sto, pp_err = pp.calc_interface_params(
+                            self.__pp_info, T_ff_sys, T_rf_sys, T_rf_sto, abs(Q), storage_mode)
                 else:
                     Q_sto, Q_sys, P_plant, ti_plant, T_ff_sto, T_rf_sto, m_sto, pp_err = \
                         0, 0, 0, 0, 0, T_rf_sto, 0, False
@@ -162,14 +169,19 @@ class CoupledModel:
                 else:
                     info('POWERPLANT calculation completed')
                     # geostorage
-                    T_rf_sto_geo, gs_belowMinimumTemperature = self.__gs.run_storage_simulation(
-                        T_ff_sto, m_sto, storage_mode)
+                    T_rf_sto_geo, gs_belowMinumumTemperature, m_sto_geo = self.__gs.run_storage_simulation(T_ff_sto, m_sto, storage_mode)
                     # evaluate
                     info('GEOSTORAGE return temperature: {}'.format(T_rf_sto_geo))
 
-                error = abs(T_rf_sto_geo - T_rf_sto)
-                info('INTERFACE coupling error: {}'.format(error))
-                if error < self.__prop.temperature_return_error and iter >= self.__prop.iter_min-1 or abs(Q) < 1e-3:
+                else:
+                    T_rf_sto_geo = T_rf_sto
+
+                error_T = abs(T_rf_sto_geo - T_rf_sto)
+                error_m = abs(m_sto_geo - m_sto)
+                info('INTERFACE coupling error: {}'.format(np.linalg.norm([error_m, error_T])))
+                if (error_T < self.__prop.temperature_return_error and
+                        error_m < self.__prop.mass_flow_error and
+                        iter >= self.__prop.iter_min-1 or abs(Q) < 1e-3):
                     info("INTERFACE loop converged")
                     break
                 # update

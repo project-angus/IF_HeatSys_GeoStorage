@@ -78,7 +78,7 @@ class OgsKb1(GeoStorageSimulator):
                 copy(os.path.join(self.__directory, '_' + self.__basename + '.bc'), bc_file)
 
                 replace(bc_file, "$INFLOW_TEMPERATURE", str(T_ff_sto + 273.15))
-                if storage_mode == 'charging':
+                if storage_mode == 'charging' or storage_mode == 'shutin':
                     replace(bc_file, "$INFLOW_POSITION_{0}".format(i), "WARM_{0}".format(i))
                 elif storage_mode == 'discharging':
                     replace(bc_file, "$INFLOW_POSITION_{0}".format(i), "COLD_{0}".format(i))
@@ -113,8 +113,8 @@ class OgsKb1(GeoStorageSimulator):
             try:
                 with open(os.path.join(self.__directory,
                                        self.__basename + '_HEAT_TRANSPORT_Contraflow_{}.tec'.format(i))) as file:
-                    line = file.readline()
                     line = file.readlines()[1]
+
                     t_rf_sto = float(line.split()[2])
             except:
                 position = 'PNT_COLD' if storage_mode == 'charging' else 'PNT_WARM'

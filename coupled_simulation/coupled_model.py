@@ -162,19 +162,17 @@ class CoupledModel:
                 #Q_sto, Q_sys, P_plant, ti_plant, T_ff_sto, T_rf_sto, m_sto, pp_err = pp.calc_interface_params(
                 #    self.__pp_info, T_ff_sys, T_rf_sys, T_rf_sto, abs(Q), storage_mode) if abs(Q) > 1e-3 else 0, 0, 0, 0, 0, T_rf_sto, 0, False
 
+                info('POWERPLANT calculation completed')
                 if m_sto == 0:
-                    storage_mode = 'shutin'
+                    storage_mode =  'shutin'
+                    T_rf_sto_geo, gs_belowMinumumTemperature, m_sto_geo = self.__gs.run_storage_simulation(0., 1., storage_mode)
                     T_rf_sto_geo = T_rf_sto
                     m_sto_geo = 0
                 else:
-                    info('POWERPLANT calculation completed')
                     # geostorage
                     T_rf_sto_geo, gs_belowMinumumTemperature, m_sto_geo = self.__gs.run_storage_simulation(T_ff_sto, m_sto, storage_mode)
                     # evaluate
                     info('GEOSTORAGE return temperature: {}'.format(T_rf_sto_geo))
-
-                #else:
-                #    T_rf_sto_geo = T_rf_sto
 
                 error_T = abs(T_rf_sto_geo - T_rf_sto)
                 error_m = abs(m_sto_geo - m_sto)
@@ -187,7 +185,7 @@ class CoupledModel:
                 # update
                 T_rf_sto = T_rf_sto_geo
                 m_sto = m_sto_geo
-            except:
+            except NameError:
                 Q_sto, Q_sys, P_plant, Q_actual, ti_plant, T_ff_sto, T_rf_sto_geo, m_sto, pp_err = \
                     None, None, None, None, None, None, None, None, False
                 error("INTERFACE iteration failed")

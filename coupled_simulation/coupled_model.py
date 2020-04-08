@@ -29,7 +29,7 @@ class CoupledModel:
 
         info('INTERFACE Input time series read')
         cols = ['time', 'Q_target', 'Q_actual', 'Q_sto', 'P_plant', 'ti_plant',
-                'T_ff_sys', 'T_rf_sys', 'T_ff_sto', 'T_rf_sto','m_sto', 'pp_err']
+                'T_ff_sys', 'T_rf_sys', 'T_ff_sto', 'T_rf_sto','v_sto', 'pp_err']
         self.__output_ts = DataFrame(index=np.arange(0, self.__prop.t_steps_total),
                                      columns=cols)
 
@@ -82,7 +82,7 @@ class CoupledModel:
                 storage_mode = 'shutin'
 
             #storage_mode = 'charging' if Q_target > 1.e-3 elif Q_target < -1.e-3 'discharging' else 'shutin'
-            Q_sto, Q_sys, P_plant, ti_plant, T_ff_sto, T_rf_sto, m_sto, pp_err = \
+            Q_sto, Q_sys, P_plant, ti_plant, T_ff_sto, T_rf_sto, v_sto, pp_err = \
                 self.execute_timestep(Q_target, T_ff_sys, T_rf_sys, T_rf_sto_0[storage_mode], storage_mode)
 
             T_rf_sto_0[storage_mode] = T_rf_sto
@@ -90,7 +90,7 @@ class CoupledModel:
             # postprocess timestep
             self.evaluate_timestep(t_step, current_time, Q_target, Q_sys,
                                    Q_sto, P_plant, ti_plant, T_ff_sys,
-                                   T_rf_sys, T_ff_sto, T_rf_sto, m_sto, pp_err)
+                                   T_rf_sys, T_ff_sto, T_rf_sto, v_sto, pp_err)
 
             if t_step % self.__prop.save_nth_t_step == 0:
                 self.__output_ts.to_csv(
@@ -148,34 +148,31 @@ class CoupledModel:
                 # powerplant
                 if abs(Q) > 1e-3:
                     if gs_belowMinumumTemperature is True:
-                        Q_sto, Q_sys, P_plant, ti_plant, T_ff_sto, T_rf_sto, m_sto, pp_err = pp.calc_interface_params_limitation(
-                            self.__pp_info, T_ff_sys, T_rf_sys, T_rf_sto, m_sto, storage_mode)
+                        Q_sto, Q_sys, P_plant, ti_plant, T_ff_sto, T_rf_sto, v_sto, pp_err = pp.calc_interface_params_limitation(
+                            self.__pp_info, T_ff_sys, T_rf_sys, T_rf_sto, v_sto, storage_mode)
 
                     else:
-                        Q_sto, Q_sys, P_plant, ti_plant, T_ff_sto, T_rf_sto, m_sto, pp_err = pp.calc_interface_params(
+                        Q_sto, Q_sys, P_plant, ti_plant, T_ff_sto, T_rf_sto, v_sto, pp_err = pp.calc_interface_params(
                             self.__pp_info, T_ff_sys, T_rf_sys, T_rf_sto, abs(Q), storage_mode)
 
                 else:
-                    Q_sto, Q_sys, P_plant, ti_plant, T_ff_sto, T_rf_sto, m_sto, pp_err = \
+                    Q_sto, Q_sys, P_plant, ti_plant, T_ff_sto, T_rf_sto, v_sto, pp_err = \
                         0, 0, 0, 0, 0, T_rf_sto, 0, False
 
-                #Q_sto, Q_sys, P_plant, ti_plant, T_ff_sto, T_rf_sto, m_sto, pp_err = pp.calc_interface_params(
-                #    self.__pp_info, T_ff_sys, T_rf_sys, T_rf_sto, abs(Q), storage_mode) if abs(Q) > 1e-3 else 0, 0, 0, 0, 0, T_rf_sto, 0, False
-
                 info('POWERPLANT calculation completed')
-                if m_sto == 0:
+                if v_sto == 0:
                     storage_mode =  'shutin'
-                    T_rf_sto_geo, gs_belowMinumumTemperature, m_sto_geo = self.__gs.run_storage_simulation(0., 1., storage_mode)
+                    T_rf_sto_geo, gs_belowMinumumTemperature, v_sto_geo = self.__gs.run_storage_simulation(0., 1., storage_mode)
                     T_rf_sto_geo = T_rf_sto
-                    m_sto_geo = 0
+                    v_sto_geo = 0
                 else:
                     # geostorage
-                    T_rf_sto_geo, gs_belowMinumumTemperature, m_sto_geo = self.__gs.run_storage_simulation(T_ff_sto, m_sto, storage_mode)
+                    T_rf_sto_geo, gs_belowMinumumTemperature, v_sto_geo = self.__gs.run_storage_simulation(T_ff_sto, v_sto, storage_mode)
                     # evaluate
                     info('GEOSTORAGE return temperature: {}'.format(T_rf_sto_geo))
 
                 error_T = abs(T_rf_sto_geo - T_rf_sto)
-                error_m = abs(m_sto_geo - m_sto)
+                error_m = abs(v_sto_geo - v_sto)
                 info('INTERFACE coupling error: {}'.format(np.linalg.norm([error_m, error_T])))
                 if (error_T < self.__prop.temperature_return_error and
                         error_m < self.__prop.mass_flow_error and
@@ -184,16 +181,16 @@ class CoupledModel:
                     break
                 # update
                 T_rf_sto = T_rf_sto_geo
-                m_sto = m_sto_geo
+                v_sto = v_sto_geo
             except NameError:
-                Q_sto, Q_sys, P_plant, Q_actual, ti_plant, T_ff_sto, T_rf_sto_geo, m_sto, pp_err = \
+                Q_sto, Q_sys, P_plant, Q_actual, ti_plant, T_ff_sto, T_rf_sto_geo, v_sto, pp_err = \
                     None, None, None, None, None, None, None, None, False
                 error("INTERFACE iteration failed")
 
-        return Q_sto, Q_sys, P_plant, ti_plant, T_ff_sto, T_rf_sto_geo, m_sto, pp_err
+        return Q_sto, Q_sys, P_plant, ti_plant, T_ff_sto, T_rf_sto_geo, v_sto, pp_err
 
     def evaluate_timestep(self, t_step, current_time, Q_target, Q_sys, Q_sto, P_plant, ti_plant,
-                          T_ff_sys, T_rf_sys, T_ff_sto, T_rf_sto, m_sto, pp_err):
+                          T_ff_sys, T_rf_sys, T_ff_sto, T_rf_sto, v_sto, pp_err):
         """
         - write output timeseries
         :param t_step: (int) current time step
@@ -207,7 +204,7 @@ class CoupledModel:
         :param T_rf_sys: (float) return temperture from heat network
         :param T_ff_sto: (float) feed flow temperature to geostorage
         :param T_rf_sto: (float) return flow temperature from geostorage
-        :param m_sto: (float) mass flow rate through heat exchanger at geostorage side
+        :param v_sto: (float) mass flow rate through heat exchanger at geostorage side
         :param pp_err: (bool) indicates whether an error occurred in power plant simulation
         :return:
         """
@@ -255,4 +252,4 @@ class CoupledModel:
                 os.path.join(self.__prop.working_dir, 'pp_charging_' + str(t_step)))
 
         self.__output_ts.loc[t_step] = np.array([current_time, Q_target, Q_sys, Q_sto, P_plant, ti_plant,
-                                                 T_ff_sys, T_rf_sys, T_ff_sto, T_rf_sto, m_sto, pp_err])
+                                                 T_ff_sys, T_rf_sys, T_ff_sto, T_rf_sto, v_sto, pp_err])

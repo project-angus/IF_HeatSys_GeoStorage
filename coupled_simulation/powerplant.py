@@ -78,7 +78,7 @@ class model:
         self.instance.connections[self.model_data['ff_sys']].set_attr(
             T=self.model_data['T_ff_sys_design'])
 
-        self.instance.coconnectionsnns[self.model_data['rf_sys']].set_attr(
+        self.instance.connections[self.model_data['rf_sys']].set_attr(
             T=self.model_data['T_rf_sys_design'])
 
         # design storage temperatures

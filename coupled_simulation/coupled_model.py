@@ -154,13 +154,6 @@ class CoupledModel:
                         Q_sto, Q_sys, P_plant, ti_plant, T_ff_sto, T_rf_sto, m_sto, pp_err = pp.calc_interface_params(
                             self.__pp_info, T_ff_sys, T_rf_sys, T_rf_sto, abs(Q), storage_mode)
 
-                    if gs_belowMinumumTemperature is True:
-                        Q_sto, Q_sys, P_plant, ti_plant, T_ff_sto, T_rf_sto, m_sto, pp_err = pp.calc_interface_params_limitation(
-                            self.__pp_info, T_ff_sys, T_rf_sys, T_rf_sto, m_sto, storage_mode)
-
-                    else:
-                        Q_sto, Q_sys, P_plant, ti_plant, T_ff_sto, T_rf_sto, m_sto, pp_err = pp.calc_interface_params(
-                            self.__pp_info, T_ff_sys, T_rf_sys, T_rf_sto, abs(Q), storage_mode)
                 else:
                     Q_sto, Q_sys, P_plant, ti_plant, T_ff_sto, T_rf_sto, m_sto, pp_err = \
                         0, 0, 0, 0, 0, T_rf_sto, 0, False

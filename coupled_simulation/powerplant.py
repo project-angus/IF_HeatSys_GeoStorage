@@ -71,21 +71,21 @@ class model:
             self.instance.set_attr(iterinfo=True)
 
         # design heat flow
-        self.instance.imp_busses[self.model_data['heat_bus_sys']].set_attr(
+        self.instance.busses[self.model_data['heat_bus_sys']].set_attr(
             P=self.model_data['Q_design'])
 
         # design system temperatures
-        self.instance.imp_conns[self.model_data['ff_sys']].set_attr(
+        self.instance.connections[self.model_data['ff_sys']].set_attr(
             T=self.model_data['T_ff_sys_design'])
 
-        self.instance.imp_conns[self.model_data['rf_sys']].set_attr(
+        self.instance.coconnectionsnns[self.model_data['rf_sys']].set_attr(
             T=self.model_data['T_rf_sys_design'])
 
         # design storage temperatures
-        self.instance.imp_conns[self.model_data['ff_sto']].set_attr(
+        self.instance.connections[self.model_data['ff_sto']].set_attr(
             T=self.model_data['T_ff_sto_design'])
 
-        self.instance.imp_conns[self.model_data['rf_sto']].set_attr(
+        self.instance.connections[self.model_data['rf_sto']].set_attr(
             T=self.model_data['T_rf_sto_design'])
 
         # solve design case and save to path
@@ -101,7 +101,7 @@ class model:
         Q_range = np.linspace(
             self.model_data['Q_low'], 1, 3)[::-1] * self.model_data['Q_design']
         for Q in Q_range:
-            self.instance.imp_busses[
+            self.instance.busses[
                 self.model_data['heat_bus_sys']].set_attr(P=Q)
 
             self.instance.solve('offdesign', design_path=self.new_design)
@@ -168,12 +168,20 @@ def calc_interface_params(ppinfo, T_ff_sys, T_rf_sys, T_rf_sto, Q, mode):
         ttd_restriction = ppinfo['charge']['restricted']
         plant = ppinfo['power_plant_models'][charge]['plant']
 
+        if T_ff_sys - T_rf_sto < ppinfo['charge']['dt_min']:
+            msg = ('Temperature difference too low for operation.')
+            logging.warning(msg)
+            T_rf_sto = T_ff_sys - ppinfo['charge']['dt_min'] * 1.25
+            T_ff_sto = T_rf_sto
+            return 0, 0, 0, 0, T_ff_sto, T_rf_sto, 0, False
+
+
         # check for minimum heat transfer
         Q_min = plant.model_data['Q_min'] * plant.model_data['Q_design']
         if Q < Q_min:
             # storage interface plant operation impossible
             msg = ('Target heat extraction rate of ' + str(round(Q, 0)) + ' W '
-                   'below minimum possible heat extraction rate ofF ' +
+                   'below minimum possible heat extraction rate of ' +
                    str(round(Q_min, 0)) + ' W. '
                    'Interface operation impossible.')
             logging.warning(msg)
@@ -190,6 +198,11 @@ def calc_interface_params(ppinfo, T_ff_sys, T_rf_sys, T_rf_sto, Q, mode):
             # inlet
             IF_data = sim_IF_charge(
                 plant, T_ff_sys, T_rf_sto, Q, ttd, T_ff_sto_max)
+
+            if IF_data[-1]:
+                T_rf_sto = T_ff_sys - ppinfo['charge']['dt_min'] * 1.25
+                IF_data = list(IF_data)
+                IF_data = IF_data[0:5] + [T_rf_sto] + IF_data[6:]
 
         return IF_data
 
@@ -352,13 +365,13 @@ def sim_IF_discharge(plant, T_ff_sys, T_rf_sys, T_rf_sto, Q):
     model = plant.instance
 
     # specify system parameters
-    model.imp_busses[plant.model_data['heat_bus_sys']].set_attr(P=np.nan)
-    model.imp_conns[plant.model_data['rf_sys']].set_attr(T=T_rf_sys)
-    model.imp_conns[plant.model_data['rf_sto']].set_attr(T=T_rf_sto, m=np.nan)
-    model.imp_conns[plant.model_data['ff_sto']].set_attr(T=np.nan)
-    model.imp_conns[plant.model_data['ff_sys']].set_attr(
-            m=np.nan, T=T_ff_sys, design=[])
-    model.imp_busses[plant.model_data['heat_bus_sys']].set_attr(P=Q)
+    model.busses[plant.model_data['heat_bus_sys']].set_attr(P=np.nan)
+    model.connections[plant.model_data['rf_sys']].set_attr(T=T_rf_sys)
+    model.connections[plant.model_data['rf_sto']].set_attr(T=T_rf_sto)
+    model.connections[plant.model_data['ff_sto']].set_attr(T=np.nan)
+    model.connections[plant.model_data['ff_sys']].set_attr(
+        m=np.nan, T=T_ff_sys, design=[])
+    model.busses[plant.model_data['heat_bus_sys']].set_attr(P=Q)
 
     # solving
     try:
@@ -394,13 +407,13 @@ def sim_IF_discharge(plant, T_ff_sys, T_rf_sys, T_rf_sto, Q):
         return 0, 0, 0, 0, 0, T_rf_sto, 0, True
 
     for conn_id, limits in plant.model_data['limiting_mass_flow'].items():
-        conn = model.imp_conns[conn_id]
+        conn = model.connections[conn_id]
         m_max = conn.m.design * limits[1]
         m_min = conn.m.design * limits[0]
         m = conn.m.val_SI
 
         if m > m_max:
-            model.imp_busses[plant.model_data['heat_bus_sys']].set_attr(
+            model.busses[plant.model_data['heat_bus_sys']].set_attr(
                 P=np.nan)
             m_range = np.linspace(m_max, m, num=3, endpoint=False)
             for m_val in m_range[::-1]:
@@ -423,18 +436,18 @@ def sim_IF_discharge(plant, T_ff_sys, T_rf_sys, T_rf_sto, Q):
         conn.set_attr(m=np.nan)
 
     # storage interface temperatures
-    T_ff_sys = model.imp_conns[plant.model_data['ff_sys']].T.val
-    T_ff_sto = model.imp_conns[plant.model_data['ff_sto']].T.val
-    T_rf_sto = model.imp_conns[plant.model_data['rf_sto']].T.val
+    T_ff_sys = model.connections[plant.model_data['ff_sys']].T.val
+    T_ff_sto = model.connections[plant.model_data['ff_sto']].T.val
+    T_rf_sto = model.connections[plant.model_data['rf_sto']].T.val
 
     # storage mass flow
-    m_sto = model.imp_conns[plant.model_data['ff_sto']].m.val
+    m_sto = model.connections[plant.model_data['ff_sto']].m.val
 
     # interface transferred energy params
-    Q_sto = model.imp_busses[plant.model_data['heat_bus_sto']].P.val
-    Q_sys = model.imp_busses[plant.model_data['heat_bus_sys']].P.val
-    P_IF = model.imp_busses[plant.model_data['power_bus']].P.val
-    TI_IF = model.imp_busses[plant.model_data['ti_bus']].P.val
+    Q_sto = model.busses[plant.model_data['heat_bus_sto']].P.val
+    Q_sys = model.busses[plant.model_data['heat_bus_sys']].P.val
+    P_IF = model.busses[plant.model_data['power_bus']].P.val
+    TI_IF = model.busses[plant.model_data['ti_bus']].P.val
 
     return Q_sto, Q_sys, P_IF, TI_IF, T_ff_sto, T_rf_sto, m_sto, False
 
@@ -490,7 +503,7 @@ def sim_IF_charge(plant, T_rf_sys, T_rf_sto, Q, ttd, T_ff_sto_max):
         Indicates whether an error occurred in calculation.
     """
     model = plant.instance
-    model.imp_busses[plant.model_data['heat_bus_sys']].set_attr(P=np.nan)
+    model.busses[plant.model_data['heat_bus_sys']].set_attr(P=np.nan)
 
     if T_ff_sto_max < T_rf_sys - ttd:
         T_ff_sto = T_ff_sto_max
@@ -498,11 +511,11 @@ def sim_IF_charge(plant, T_rf_sys, T_rf_sto, Q, ttd, T_ff_sto_max):
         T_ff_sto = T_rf_sys - ttd
 
     # specify system parameters
-    model.imp_busses[plant.model_data['heat_bus_sys']].set_attr(P=Q)
-    model.imp_conns[plant.model_data['rf_sys']].set_attr(T=T_rf_sys)
-    model.imp_conns[plant.model_data['rf_sto']].set_attr(T=T_rf_sto)
-    model.imp_conns[plant.model_data['ff_sto']].set_attr(T=T_ff_sto)
-    model.imp_conns[plant.model_data['ff_sys']].set_attr(
+    model.busses[plant.model_data['heat_bus_sys']].set_attr(P=Q)
+    model.connections[plant.model_data['rf_sys']].set_attr(T=T_rf_sys)
+    model.connections[plant.model_data['rf_sto']].set_attr(T=T_rf_sto)
+    model.connections[plant.model_data['ff_sto']].set_attr(T=T_ff_sto)
+    model.connections[plant.model_data['ff_sys']].set_attr(
         m=np.nan, T=np.nan, design=[])
 
     # solving
@@ -537,13 +550,13 @@ def sim_IF_charge(plant, T_rf_sys, T_rf_sto, Q, ttd, T_ff_sto_max):
         return 0, 0, 0, 0, 0, T_rf_sto, 0, True
 
     for conn_id, limits in plant.model_data['limiting_mass_flow'].items():
-        conn = model.imp_conns[conn_id]
+        conn = model.connections[conn_id]
         m_max = conn.m.design * limits[1]
         m_min = conn.m.design * limits[0]
         m = conn.m.val_SI
 
         if m > m_max:
-            model.imp_busses[plant.model_data['heat_bus_sys']].set_attr(
+            model.busses[plant.model_data['heat_bus_sys']].set_attr(
                 P=np.nan)
             m_range = np.linspace(m_max, m, num=3, endpoint=False)
             for m_val in m_range[::-1]:
@@ -566,18 +579,18 @@ def sim_IF_charge(plant, T_rf_sys, T_rf_sto, Q, ttd, T_ff_sto_max):
         conn.set_attr(m=np.nan)
 
     # storage interface temperatures
-    T_ff_sys = model.imp_conns[plant.model_data['ff_sys']].T.val
-    T_ff_sto = model.imp_conns[plant.model_data['ff_sto']].T.val
-    T_rf_sto = model.imp_conns[plant.model_data['rf_sto']].T.val
+    T_ff_sys = model.connections[plant.model_data['ff_sys']].T.val
+    T_ff_sto = model.connections[plant.model_data['ff_sto']].T.val
+    T_rf_sto = model.connections[plant.model_data['rf_sto']].T.val
 
     # storage mass flow
-    m_sto = model.imp_conns[plant.model_data['ff_sto']].m.val
+    m_sto = model.connections[plant.model_data['ff_sto']].m.val
 
     # interface transferred energy params
-    Q_sto = model.imp_busses[plant.model_data['heat_bus_sto']].P.val
-    Q_sys = model.imp_busses[plant.model_data['heat_bus_sys']].P.val
-    P_IF = model.imp_busses[plant.model_data['power_bus']].P.val
-    TI_IF = model.imp_busses[plant.model_data['ti_bus']].P.val
+    Q_sto = model.busses[plant.model_data['heat_bus_sto']].P.val
+    Q_sys = model.busses[plant.model_data['heat_bus_sys']].P.val
+    P_IF = model.busses[plant.model_data['power_bus']].P.val
+    TI_IF = model.busses[plant.model_data['ti_bus']].P.val
 
     return Q_sto, Q_sys, P_IF, TI_IF, T_ff_sto, T_rf_sto, m_sto, False
 
@@ -633,11 +646,11 @@ def sim_IF_discharge_limitation(plant, T_ff_sys, T_rf_sys, T_rf_sto, m):
     model = plant.instance
 
     # specify system parameters
-    model.imp_busses[plant.model_data['heat_bus_sys']].set_attr(P=np.nan)
-    model.imp_conns[plant.model_data['rf_sys']].set_attr(T=T_rf_sys)
-    model.imp_conns[plant.model_data['rf_sto']].set_attr(T=T_rf_sto, m=m)
-    model.imp_conns[plant.model_data['ff_sto']].set_attr(T=np.nan)
-    model.imp_conns[plant.model_data['ff_sys']].set_attr(
+    model.busses[plant.model_data['heat_bus_sys']].set_attr(P=np.nan)
+    model.connections[plant.model_data['rf_sys']].set_attr(T=T_rf_sys)
+    model.connections[plant.model_data['rf_sto']].set_attr(T=T_rf_sto, m=m)
+    model.connections[plant.model_data['ff_sto']].set_attr(T=np.nan)
+    model.connections[plant.model_data['ff_sys']].set_attr(
             m=np.nan, T=T_ff_sys, design=[])
 
     # solving
@@ -660,13 +673,13 @@ def sim_IF_discharge_limitation(plant, T_ff_sys, T_rf_sys, T_rf_sto, m):
         return 0, 0, 0, 0, 0, T_rf_sto, 0, True
 
     for conn_id, limits in plant.model_data['limiting_mass_flow'].items():
-        conn = model.imp_conns[conn_id]
+        conn = model.connections[conn_id]
         m_max = conn.m.design * limits[1]
         m_min = conn.m.design * limits[0]
         m = conn.m.val_SI
 
         if m > m_max:
-            model.imp_conns[plant.model_data['rf_sto']].set_attr(m=np.nan)
+            model.connections[plant.model_data['rf_sto']].set_attr(m=np.nan)
             m_range = np.linspace(m_max, m, num=3, endpoint=False)
             for m_val in m_range[::-1]:
                 conn.set_attr(m=m_val)
@@ -688,19 +701,19 @@ def sim_IF_discharge_limitation(plant, T_ff_sys, T_rf_sys, T_rf_sto, m):
         conn.set_attr(m=np.nan)
 
     # storage interface temperatures
-    T_ff_sys = model.imp_conns[plant.model_data['ff_sys']].T.val
-    T_ff_sto = model.imp_conns[plant.model_data['ff_sto']].T.val
-    T_rf_sto = model.imp_conns[plant.model_data['rf_sto']].T.val
+    T_ff_sys = model.connections[plant.model_data['ff_sys']].T.val
+    T_ff_sto = model.connections[plant.model_data['ff_sto']].T.val
+    T_rf_sto = model.connections[plant.model_data['rf_sto']].T.val
 
     # storage mass flow
-    m_sto = model.imp_conns[plant.model_data['ff_sto']].m.val
+    m_sto = model.connections[plant.model_data['ff_sto']].m.val
 
     # interface transferred energy params
-    Q_sto = model.imp_busses[plant.model_data['heat_bus_sto']].P.val
-    Q_sys = model.imp_busses[plant.model_data['heat_bus_sys']].P.val
-    P_IF = model.imp_busses[plant.model_data['power_bus']].P.val
-    TI_IF = model.imp_busses[plant.model_data['ti_bus']].P.val
+    Q_sto = model.busses[plant.model_data['heat_bus_sto']].P.val
+    Q_sys = model.busses[plant.model_data['heat_bus_sys']].P.val
+    P_IF = model.busses[plant.model_data['power_bus']].P.val
+    TI_IF = model.busses[plant.model_data['ti_bus']].P.val
 
-    model.imp_conns[plant.model_data['rf_sto']].set_attr(m=np.nan)
+    model.connections[plant.model_data['rf_sto']].set_attr(m=np.nan)
 
     return Q_sto, Q_sys, P_IF, TI_IF, T_ff_sto, T_rf_sto, m_sto, False

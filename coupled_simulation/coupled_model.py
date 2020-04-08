@@ -52,8 +52,13 @@ class CoupledModel:
             pass
 
         info('INTERFACE time stepping prepared')
+        discharge = self.__pp_info['discharge']['name']
+        T_DC = self.__pp_info['power_plant_models'][discharge]['T_rf_sto_design']
 
-        return 40, 30  # INITIALIZATION
+        charge = self.__pp_info['charge']['name']
+        T_C = self.__pp_info['power_plant_models'][charge]['T_rf_sto_design']
+
+        return T_DC, T_C  # INITIALIZATION
 
     def execute(self):
         """
@@ -138,7 +143,6 @@ class CoupledModel:
         """
         # initialization
         Q = Q_target
-        gs_belowMinumumTemperature = False # for power plant model !!!!!!!!!!
 
         # iteration
         for iter in range(self.__prop.iter_max):
@@ -147,12 +151,12 @@ class CoupledModel:
             try:
                 # powerplant
                 if abs(Q) > 1e-3:
-                    if gs_belowMinumumTemperature is True:
-                        Q_sto, Q_sys, P_plant, ti_plant, T_ff_sto, T_rf_sto, v_sto, pp_err = pp.calc_interface_params_limitation(
-                            self.__pp_info, T_ff_sys, T_rf_sys, T_rf_sto, v_sto, storage_mode)
-
-                    else:
-                        Q_sto, Q_sys, P_plant, ti_plant, T_ff_sto, T_rf_sto, v_sto, pp_err = pp.calc_interface_params(
+                    #if gs_belowMinumumTemperature is True:
+                    #    Q_sto, Q_sys, P_plant, ti_plant, T_ff_sto, T_rf_sto, v_sto, pp_err = pp.calc_interface_params_limitation(
+                    #        self.__pp_info, T_ff_sys, T_rf_sys, T_rf_sto, v_sto, storage_mode)
+                    #
+                    #else:
+                    Q_sto, Q_sys, P_plant, ti_plant, T_ff_sto, T_rf_sto, v_sto, pp_err = pp.calc_interface_params(
                             self.__pp_info, T_ff_sys, T_rf_sys, T_rf_sto, abs(Q), storage_mode)
 
                 else:
@@ -160,29 +164,30 @@ class CoupledModel:
                         0, 0, 0, 0, 0, T_rf_sto, 0, False
 
                 info('POWERPLANT calculation completed')
+                print(v_sto)
                 if v_sto == 0:
                     storage_mode =  'shutin'
-                    T_rf_sto_geo, gs_belowMinumumTemperature, v_sto_geo = self.__gs.run_storage_simulation(0., 1., storage_mode)
+                    T_rf_sto_geo, v_sto_geo = self.__gs.run_storage_simulation(0., 1.e-3, storage_mode)
                     T_rf_sto_geo = T_rf_sto
                     v_sto_geo = 0
                 else:
                     # geostorage
-                    T_rf_sto_geo, gs_belowMinumumTemperature, v_sto_geo = self.__gs.run_storage_simulation(T_ff_sto, v_sto, storage_mode)
+                    T_rf_sto_geo, v_sto_geo = self.__gs.run_storage_simulation(T_ff_sto, v_sto, storage_mode)
                     # evaluate
                     info('GEOSTORAGE return temperature: {}'.format(T_rf_sto_geo))
 
                 error_T = abs(T_rf_sto_geo - T_rf_sto)
-                error_m = abs(v_sto_geo - v_sto)
-                info('INTERFACE coupling error: {}'.format(np.linalg.norm([error_m, error_T])))
+                #error_m = abs(v_sto_geo - v_sto)
+                info('INTERFACE coupling error: {}'.format(error_T))
                 if (error_T < self.__prop.temperature_return_error and
-                        error_m < self.__prop.mass_flow_error and
+                        #error_m < self.__prop.mass_flow_error and
                         iter >= self.__prop.iter_min-1 or abs(Q) < 1e-3):
                     info("INTERFACE loop converged")
                     break
                 # update
                 T_rf_sto = T_rf_sto_geo
                 v_sto = v_sto_geo
-            except NameError:
+            except:
                 Q_sto, Q_sys, P_plant, Q_actual, ti_plant, T_ff_sto, T_rf_sto_geo, v_sto, pp_err = \
                     None, None, None, None, None, None, None, None, False
                 error("INTERFACE iteration failed")

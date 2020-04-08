@@ -184,19 +184,4 @@ class GeoStorage:
 
         T_rf_sto = self.__simulator.postprocess(storage_mode)
 
-        if T_rf_sto < self.__T_min and self.__flag_belowMinimumTemperature == False:
-            debug("GEOSTORAGE Discharge below minimum temperature")
-            self.__flag_belowMinimumTemperature = True
-
-        if self.__flag_belowMinimumTemperature:
-            T_diff = T_rf_sto - self.__T_min
-            debug("T_diff: {} - T_rf_sto: {} - m_sto: {}".format(T_diff, T_rf_sto, m_sto))
-
-            if T_diff < -0.01:
-                self.run_storage_simulation(T_ff_sto, m_sto/(1 - 0.2 * T_diff), storage_mode)
-            elif T_diff > 0.01:
-                self.run_storage_simulation(T_ff_sto, m_sto*(1 + 0.2 * T_diff), storage_mode)
-            else:
-                info("GEOSTORAGE Inner iteration converged")
-
-        return T_rf_sto, self.__flag_belowMinimumTemperature, m_sto
+        return T_rf_sto, m_sto

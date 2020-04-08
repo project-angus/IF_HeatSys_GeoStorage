@@ -23,8 +23,9 @@ class CoupledModel:
         self.__directory = os.path.dirname(self.__gs.simulation_files())
         self.__basename = os.path.basename(self.__gs.simulation_files())
         info('INTERFACE powerplant models loaded')
-        self.__input_ts = read_csv(os.path.join(self.__prop.working_dir, self.__prop.input_timeseries_file),
-                                      delimiter=',', decimal='.')
+        self.__input_ts = read_csv(os.path.join(
+            self.__prop.working_dir, self.__prop.input_timeseries_file),
+            delimiter=',', decimal='.')
 
         info('INTERFACE Input time series read')
         cols = ['time', 'Q_target', 'Q_actual', 'Q_sto', 'P_plant', 'ti_plant',
@@ -164,6 +165,7 @@ class CoupledModel:
                 if m_sto == 0:
                     storage_mode = 'shutin'
                     T_rf_sto_geo = T_rf_sto
+                    m_sto_geo = 0
                 else:
                     info('POWERPLANT calculation completed')
                     # geostorage
@@ -186,8 +188,8 @@ class CoupledModel:
                 T_rf_sto = T_rf_sto_geo
                 m_sto = m_sto_geo
             except:
-                Q_sto, P_plant, Q_actual, ti_plant, T_ff_sto, T_rf_sto_geo, m_sto, pp_err = \
-                    None, None, None, None, None, None, None, False
+                Q_sto, Q_sys, P_plant, Q_actual, ti_plant, T_ff_sto, T_rf_sto_geo, m_sto, pp_err = \
+                    None, None, None, None, None, None, None, None, False
                 error("INTERFACE iteration failed")
 
         return Q_sto, Q_sys, P_plant, ti_plant, T_ff_sto, T_rf_sto_geo, m_sto, pp_err

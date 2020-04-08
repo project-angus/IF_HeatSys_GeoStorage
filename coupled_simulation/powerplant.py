@@ -198,11 +198,11 @@ def calc_interface_params(ppinfo, T_ff_sys, T_rf_sys, T_rf_sto, Q, mode):
             # inlet
             IF_data = sim_IF_charge(
                 plant, T_ff_sys, T_rf_sto, Q, ttd, T_ff_sto_max)
-
-            if IF_data[-1]:
-                T_rf_sto = T_ff_sys - ppinfo['charge']['dt_min'] * 1.25
-                IF_data = list(IF_data)
-                IF_data = IF_data[0:5] + [T_rf_sto] + IF_data[6:]
+            #
+            # if IF_data[-1]:
+            #     T_rf_sto = T_ff_sys - ppinfo['charge']['dt_min'] * 1.25
+            #     IF_data = list(IF_data)
+            #     IF_data = IF_data[0:5] + [T_rf_sto] + IF_data[6:]
 
         return IF_data
 
@@ -326,7 +326,10 @@ def sim_IF_discharge(plant, T_ff_sys, T_rf_sys, T_rf_sto, Q):
         model.lin_dep = True
 
     if model.lin_dep or model.res[-1] > 1e-3:
-        return 0, 0, 0, 0, 0, T_rf_sto, 0, True
+        return (
+            0, 0, 0, 0, 0,
+            model.connections[plant.model_data['rf_sto']].T.design - 273.15,
+            0, True)
 
     for conn_id, limits in plant.model_data['limiting_mass_flow'].items():
         conn = model.connections[conn_id]
@@ -469,7 +472,10 @@ def sim_IF_charge(plant, T_rf_sys, T_rf_sto, Q, ttd, T_ff_sto_max):
         model.lin_dep = True
 
     if model.lin_dep or model.res[-1] > 1e-3:
-        return 0, 0, 0, 0, 0, T_rf_sto, 0, True
+        return (
+            0, 0, 0, 0, 0,
+            model.connections[plant.model_data['rf_sto']].T.design - 273.15,
+            0, True)
 
     for conn_id, limits in plant.model_data['limiting_mass_flow'].items():
         conn = model.connections[conn_id]

@@ -216,14 +216,14 @@ class CoupledModel:
             os.remove(os.path.join(self.__directory, self.__basename + '0000.vtk'))
 
             if t_step % self.__prop.save_nth_t_step == 0:
-                info('Store vtk')
+                info('GEOSTORAGE keep vtk')
                 shutil.copy(os.path.join(self.__directory, self.__basename + '0001.vtk'),
                             os.path.join(self.__directory, self.__basename + '000{}'.format(t_step)[-4:] + '.vtk'))
             else:
                 os.remove(os.path.join(self.__directory, self.__basename + '0001.vtk'))
 
             if t_step % self.__prop.save_debug_nth_t_step == 0:
-                info('BREAKPOINT - store geostorage results')
+                info('BREAKPOINT - keep geostorage results')
 
                 shutil.copy(os.path.join(self.__directory,
                                          self.__basename + '_HEAT_TRANSPORT_domain_primary_variables.txt'),

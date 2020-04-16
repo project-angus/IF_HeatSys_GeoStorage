@@ -168,7 +168,8 @@ class CoupledModel:
                     storage_mode =  'shutin'
                     T_rf_sto_geo, v_sto_geo = self.__gs.run_storage_simulation(0., 1.e-3, storage_mode)
                     T_rf_sto_geo = T_rf_sto
-                    v_sto_geo = 0
+                    v_sto_geo = 0.
+                    Q = 0.
                 else:
                     # geostorage
                     T_rf_sto_geo, v_sto_geo = self.__gs.run_storage_simulation(T_ff_sto, v_sto, storage_mode)

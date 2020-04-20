@@ -97,16 +97,6 @@ class model:
         self.instance.solve('offdesign', design_path=self.new_design,
                             init_path=self.new_design)
 
-        # create low load data
-        Q_range = np.linspace(
-            self.model_data['Q_low'], 1, 3)[::-1] * self.model_data['Q_design']
-        for Q in Q_range:
-            self.instance.busses[
-                self.model_data['heat_bus_sys']].set_attr(P=Q)
-
-            self.instance.solve('offdesign', design_path=self.new_design)
-        self.instance.save(self.new_design + '_low_Q')
-
 
 def calc_interface_params(ppinfo, T_ff_sys, T_rf_sys, T_rf_sto, Q, mode):
     """
@@ -287,7 +277,8 @@ def sim_IF_discharge(plant, T_ff_sys, T_rf_sys, T_rf_sto, Q):
     model = plant.instance
 
     # specify system parameters
-    model.busses[plant.model_data['heat_bus_sys']].set_attr(P=np.nan)
+    Q_old = model.busses[plant.model_data['heat_bus_sys']].P.val
+    model.busses[plant.model_data['heat_bus_sys']].set_attr(P=None)
     model.connections[plant.model_data['rf_sys']].set_attr(T=T_rf_sys)
     model.connections[plant.model_data['rf_sto']].set_attr(T=T_rf_sto)
     model.connections[plant.model_data['ff_sto']].set_attr(T=np.nan)
@@ -298,8 +289,7 @@ def sim_IF_discharge(plant, T_ff_sys, T_rf_sys, T_rf_sto, Q):
     # solving
     try:
         design = plant.new_design
-        if Q < plant.model_data['Q_design'] * plant.model_data['Q_low']:
-            # initialise low heat transfer cases with init_path_low_Q
+        if np.isnan(Q_old):
             for Q_step in np.linspace(plant.model_data['Q_design'], Q, 5):
                 if Q_step == plant.model_data['Q_design']:
                     model.busses[plant.model_data['heat_bus_sys']].set_attr(P=Q_step)
@@ -307,20 +297,13 @@ def sim_IF_discharge(plant, T_ff_sys, T_rf_sys, T_rf_sto, Q):
                 else:
                     model.busses[plant.model_data['heat_bus_sys']].set_attr(P=Q_step)
                     model.solve('offdesign', design_path=design)
-
-            if model.lin_dep or model.res[-1] > 1e-3:
-                raise TESPyNetworkError
-
         else:
-            try:
+            for Q_step in np.linspace(Q_old, Q, 5):
+                model.busses[plant.model_data['heat_bus_sys']].set_attr(P=Q_step)
                 model.solve('offdesign', design_path=design)
-                if model.lin_dep or model.res[-1] > 1e-3:
-                    raise TESPyNetworkError
 
-            except (TESPyNetworkError, ValueError):
-                model.solve('offdesign', design_path=design, init_path=design)
-                if model.lin_dep or model.res[-1] > 1e-3:
-                    raise TESPyNetworkError
+        if model.lin_dep or model.res[-1] > 1e-3:
+            raise TESPyNetworkError
 
     except (TESPyNetworkError, ValueError):
         model.lin_dep = True
@@ -436,6 +419,7 @@ def sim_IF_charge(plant, T_rf_sys, T_rf_sto, Q, ttd, T_ff_sto_max):
         T_ff_sto = T_rf_sys - ttd
 
     # specify system parameters
+    Q_old = model.busses[plant.model_data['heat_bus_sys']].P.val
     model.busses[plant.model_data['heat_bus_sys']].set_attr(P=Q)
     model.connections[plant.model_data['rf_sys']].set_attr(T=T_rf_sys)
     model.connections[plant.model_data['rf_sto']].set_attr(T=T_rf_sto)
@@ -444,10 +428,10 @@ def sim_IF_charge(plant, T_rf_sys, T_rf_sto, Q, ttd, T_ff_sto_max):
         v=np.nan, T=np.nan, design=[])
 
     # solving
+
     try:
         design = plant.new_design
-        if Q < plant.model_data['Q_design'] * plant.model_data['Q_low']:
-            # initialise low heat transfer cases with init_path_low_Q
+        if np.isnan(Q_old):
             for Q_step in np.linspace(plant.model_data['Q_design'], Q, 5):
                 if Q_step == plant.model_data['Q_design']:
                     model.busses[plant.model_data['heat_bus_sys']].set_attr(P=Q_step)
@@ -455,27 +439,21 @@ def sim_IF_charge(plant, T_rf_sys, T_rf_sto, Q, ttd, T_ff_sto_max):
                 else:
                     model.busses[plant.model_data['heat_bus_sys']].set_attr(P=Q_step)
                     model.solve('offdesign', design_path=design)
-
-            if model.lin_dep or model.res[-1] > 1e-3:
-                raise TESPyNetworkError
-
         else:
-            try:
+            for Q_step in np.linspace(Q_old, Q, 5):
+                model.busses[plant.model_data['heat_bus_sys']].set_attr(P=Q_step)
                 model.solve('offdesign', design_path=design)
-                if model.lin_dep or model.res[-1] > 1e-3:
-                    raise TESPyNetworkError
-
-            except (TESPyNetworkError, ValueError):
-                model.solve('offdesign', design_path=design, init_path=design)
 
         if model.lin_dep or model.res[-1] > 1e-3:
             raise TESPyNetworkError
+
     except (TESPyNetworkError, ValueError):
         model.lin_dep = True
 
     if model.lin_dep or model.res[-1] > 1e-3:
         model.print_results()
-        model.solve('offdesign', design_path=design, init_path=design, init_only=True)
+        model.solve(
+            'offdesign', design_path=design, init_path=design, init_only=True)
         return (
             0, 0, 0, 0, 0,
             model.connections[plant.model_data['rf_sto']].T.design - 273.15,

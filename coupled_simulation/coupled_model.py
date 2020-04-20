@@ -168,7 +168,8 @@ class CoupledModel:
                     storage_mode =  'shutin'
                     T_rf_sto_geo, v_sto_geo = self.__gs.run_storage_simulation(0., 1.e-3, storage_mode)
                     T_rf_sto_geo = T_rf_sto
-                    v_sto_geo = 0
+                    v_sto_geo = 0.
+                    Q = 0.
                 else:
                     # geostorage
                     T_rf_sto_geo, v_sto_geo = self.__gs.run_storage_simulation(T_ff_sto, v_sto, storage_mode)
@@ -216,14 +217,14 @@ class CoupledModel:
             os.remove(os.path.join(self.__directory, self.__basename + '0000.vtk'))
 
             if t_step % self.__prop.save_nth_t_step == 0:
-                info('Store vtk')
+                info('GEOSTORAGE keep vtk')
                 shutil.copy(os.path.join(self.__directory, self.__basename + '0001.vtk'),
                             os.path.join(self.__directory, self.__basename + '000{}'.format(t_step)[-4:] + '.vtk'))
             else:
                 os.remove(os.path.join(self.__directory, self.__basename + '0001.vtk'))
 
             if t_step % self.__prop.save_debug_nth_t_step == 0:
-                info('BREAKPOINT - store geostorage results')
+                info('BREAKPOINT - keep geostorage results')
 
                 shutil.copy(os.path.join(self.__directory,
                                          self.__basename + '_HEAT_TRANSPORT_domain_primary_variables.txt'),

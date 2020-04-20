@@ -284,16 +284,17 @@ def sim_IF_discharge(plant, T_ff_sys, T_rf_sys, T_rf_sto, Q):
     model = plant.instance
 
     # specify system parameters
-    Q_old = model.busses[plant.model_data['heat_bus_sys']].P.val
     rf_sto_conn = model.connections[plant.model_data['rf_sto']]
     ff_sto_conn = model.connections[plant.model_data['ff_sto']]
     rf_sys_conn = model.connections[plant.model_data['rf_sys']]
     ff_sys_conn = model.connections[plant.model_data['ff_sys']]
+    heat_bus_sys = model.busses[plant.model_data['heat_bus_sys']]
+    Q_old = heat_bus_sys.P.val
     T_rf_sto_old = rf_sto_conn.T.val
     T_ff_sys_old = ff_sys_conn.T.val
     T_rf_sys_old = rf_sys_conn.T.val
 
-    model.busses[plant.model_data['heat_bus_sys']].set_attr(P=Q_old)
+    heat_bus_sys.set_attr(P=Q_old)
 
     # solving
     try:
@@ -316,10 +317,10 @@ def sim_IF_discharge(plant, T_ff_sys, T_rf_sys, T_rf_sto, Q):
             if abs(Q_step - Q) / Q < 0.1:
                 break
 
-            model.busses[plant.model_data['heat_bus_sys']].set_attr(P=Q_step)
+            heat_bus_sys.set_attr(P=Q_step)
             model.solve('offdesign', design_path=design)
 
-        model.busses[plant.model_data['heat_bus_sys']].set_attr(P=Q)
+        heat_bus_sys.set_attr(P=Q)
         model.solve('offdesign', design_path=design)
 
         if model.lin_dep or model.res[-1] > 1e-3:
@@ -334,6 +335,7 @@ def sim_IF_discharge(plant, T_ff_sys, T_rf_sys, T_rf_sto, Q):
         rf_sto_conn.T.val = rf_sto_conn.T.design - 273.15
         ff_sys_conn.T.val = ff_sys_conn.T.design - 273.15
         rf_sys_conn.T.val = rf_sys_conn.T.design - 273.15
+        heat_bus_sys.set_attr(P=plant.model_data['Q_design'])
         return 0, 0, 0, 0, 0, T_rf_sto, 0, True
 
     for conn_id, limits in plant.model_data['limiting_mass_flow'].items():
@@ -343,8 +345,7 @@ def sim_IF_discharge(plant, T_ff_sys, T_rf_sys, T_rf_sto, Q):
         m = conn.m.val_SI
 
         if m > m_max:
-            model.busses[plant.model_data['heat_bus_sys']].set_attr(
-                P=np.nan)
+            heat_bus_sys.set_attr(P=np.nan)
             m_range = np.linspace(m_max, m, num=3, endpoint=False)
             for m_val in m_range[::-1]:
                 conn.set_attr(m=m_val)
@@ -375,7 +376,7 @@ def sim_IF_discharge(plant, T_ff_sys, T_rf_sys, T_rf_sto, Q):
 
     # interface transferred energy params
     Q_sto = model.busses[plant.model_data['heat_bus_sto']].P.val
-    Q_sys = model.busses[plant.model_data['heat_bus_sys']].P.val
+    Q_sys = heat_bus_sys.P.val
     P_IF = model.busses[plant.model_data['power_bus']].P.val
     TI_IF = model.busses[plant.model_data['ti_bus']].P.val
 
@@ -441,16 +442,17 @@ def sim_IF_charge(plant, T_rf_sys, T_rf_sto, Q, ttd, T_ff_sto_max):
         T_ff_sto = T_rf_sys - ttd
 
     # specify system parameters
-    Q_old = model.busses[plant.model_data['heat_bus_sys']].P.val
     rf_sto_conn = model.connections[plant.model_data['rf_sto']]
     ff_sto_conn = model.connections[plant.model_data['ff_sto']]
     rf_sys_conn = model.connections[plant.model_data['rf_sys']]
     ff_sys_conn = model.connections[plant.model_data['ff_sys']]
+    heat_bus_sys = model.busses[plant.model_data['heat_bus_sys']]
+    Q_old = heat_bus_sys.P.val
     T_rf_sto_old = rf_sto_conn.T.val
     T_ff_sto_old = ff_sto_conn.T.val
     T_rf_sys_old = rf_sys_conn.T.val
 
-    model.busses[plant.model_data['heat_bus_sys']].set_attr(P=Q_old)
+    heat_bus_sys.set_attr(P=Q_old)
 
     # solving
     try:
@@ -467,16 +469,17 @@ def sim_IF_charge(plant, T_rf_sys, T_rf_sto, Q, ttd, T_ff_sto_max):
             rf_sto_conn.set_attr(T=T_rf_sto_range[i])
             ff_sto_conn.set_attr(T=T_ff_sto_range[i])
             rf_sys_conn.set_attr(T=T_rf_sys_range[i])
+            heat_bus_sys.set_attr(P=plant.model_data['Q_design'])
             model.solve('offdesign', design_path=design)
 
         for Q_step in np.geomspace(Q, Q_old, 5, endpoint=False)[::-1]:
             if abs(Q_step - Q) / Q < 0.1:
                 break
 
-            model.busses[plant.model_data['heat_bus_sys']].set_attr(P=Q_step)
+            heat_bus_sys.set_attr(P=Q_step)
             model.solve('offdesign', design_path=design)
 
-        model.busses[plant.model_data['heat_bus_sys']].set_attr(P=Q)
+        heat_bus_sys.set_attr(P=Q)
         model.solve('offdesign', design_path=design)
 
         if model.lin_dep or model.res[-1] > 1e-3:
@@ -500,8 +503,7 @@ def sim_IF_charge(plant, T_rf_sys, T_rf_sto, Q, ttd, T_ff_sto_max):
         m = conn.m.val_SI
 
         if m > m_max:
-            model.busses[plant.model_data['heat_bus_sys']].set_attr(
-                P=np.nan)
+            heat_bus_sys.set_attr(P=np.nan)
             m_range = np.linspace(m_max, m, num=3, endpoint=False)
             for m_val in m_range[::-1]:
                 conn.set_attr(m=m_val)
@@ -532,7 +534,7 @@ def sim_IF_charge(plant, T_rf_sys, T_rf_sto, Q, ttd, T_ff_sto_max):
 
     # interface transferred energy params
     Q_sto = model.busses[plant.model_data['heat_bus_sto']].P.val
-    Q_sys = model.busses[plant.model_data['heat_bus_sys']].P.val
+    Q_sys = heat_bus_sys.P.val
     P_IF = model.busses[plant.model_data['power_bus']].P.val
     TI_IF = model.busses[plant.model_data['ti_bus']].P.val
 

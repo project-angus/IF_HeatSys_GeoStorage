@@ -202,6 +202,13 @@ def calc_interface_params(ppinfo, T_ff_sys, T_rf_sys, T_rf_sto, Q, mode):
         discharge = ppinfo['discharge']['name']
         plant = ppinfo['power_plant_models'][discharge]['plant']
 
+        if T_rf_sto < ppinfo['discharge']['T_rf_sto_min']:
+            msg = ('Storage return temperature too low for operation.')
+            logging.warning(msg)
+            T_rf_sto = ppinfo['discharge']['T_rf_sto_min'] + 2
+            T_ff_sto = T_rf_sto
+            return 0, 0, 0, 0, T_ff_sto, T_rf_sto, 0, False
+
         # check for minimum heat transfer
         Q_min = plant.model_data['Q_min'] * plant.model_data['Q_design']
         if Q < Q_min:
@@ -278,6 +285,7 @@ def sim_IF_discharge(plant, T_ff_sys, T_rf_sys, T_rf_sto, Q):
 
     # specify system parameters
     Q_old = model.busses[plant.model_data['heat_bus_sys']].P.val
+    T_rf_sto_old = model.connections[plant.model_data['rf_sto']].T.val
     model.busses[plant.model_data['heat_bus_sys']].set_attr(P=None)
     model.connections[plant.model_data['rf_sys']].set_attr(T=T_rf_sys)
     model.connections[plant.model_data['rf_sto']].set_attr(T=T_rf_sto)
@@ -309,10 +317,7 @@ def sim_IF_discharge(plant, T_ff_sys, T_rf_sys, T_rf_sto, Q):
         model.lin_dep = True
 
     if model.lin_dep or model.res[-1] > 1e-3:
-        return (
-            0, 0, 0, 0, 0,
-            model.connections[plant.model_data['rf_sto']].T.design - 273.15,
-            0, True)
+        return 0, 0, 0, 0, 0, T_rf_sto_old, 0, True
 
     for conn_id, limits in plant.model_data['limiting_mass_flow'].items():
         conn = model.connections[conn_id]
@@ -419,6 +424,7 @@ def sim_IF_charge(plant, T_rf_sys, T_rf_sto, Q, ttd, T_ff_sto_max):
         T_ff_sto = T_rf_sys - ttd
 
     # specify system parameters
+    T_rf_sto_old = model.connections[plant.model_data['rf_sto']].T.val
     Q_old = model.busses[plant.model_data['heat_bus_sys']].P.val
     model.busses[plant.model_data['heat_bus_sys']].set_attr(P=Q)
     model.connections[plant.model_data['rf_sys']].set_attr(T=T_rf_sys)
@@ -454,10 +460,7 @@ def sim_IF_charge(plant, T_rf_sys, T_rf_sto, Q, ttd, T_ff_sto_max):
         model.print_results()
         model.solve(
             'offdesign', design_path=design, init_path=design, init_only=True)
-        return (
-            0, 0, 0, 0, 0,
-            model.connections[plant.model_data['rf_sto']].T.design - 273.15,
-            0, True)
+        return 0, 0, 0, 0, 0, T_rf_sto_old, 0, True
 
     for conn_id, limits in plant.model_data['limiting_mass_flow'].items():
         conn = model.connections[conn_id]

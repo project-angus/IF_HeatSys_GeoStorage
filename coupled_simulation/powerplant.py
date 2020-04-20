@@ -285,30 +285,42 @@ def sim_IF_discharge(plant, T_ff_sys, T_rf_sys, T_rf_sto, Q):
 
     # specify system parameters
     Q_old = model.busses[plant.model_data['heat_bus_sys']].P.val
-    T_rf_sto_old = model.connections[plant.model_data['rf_sto']].T.val
-    model.busses[plant.model_data['heat_bus_sys']].set_attr(P=None)
-    model.connections[plant.model_data['rf_sys']].set_attr(T=T_rf_sys)
-    model.connections[plant.model_data['rf_sto']].set_attr(T=T_rf_sto)
-    model.connections[plant.model_data['ff_sto']].set_attr(T=np.nan)
-    model.connections[plant.model_data['ff_sys']].set_attr(
-        v=np.nan, T=T_ff_sys, design=[])
-    model.busses[plant.model_data['heat_bus_sys']].set_attr(P=Q)
+    rf_sto_conn = model.connections[plant.model_data['rf_sto']]
+    ff_sto_conn = model.connections[plant.model_data['ff_sto']]
+    rf_sys_conn = model.connections[plant.model_data['rf_sys']]
+    ff_sys_conn = model.connections[plant.model_data['ff_sys']]
+    T_rf_sto_old = rf_sto_conn.T.val
+    T_ff_sys_old = ff_sys_conn.T.val
+    T_rf_sys_old = rf_sys_conn.T.val
+
+    model.busses[plant.model_data['heat_bus_sys']].set_attr(P=Q_old)
 
     # solving
     try:
         design = plant.new_design
-        if np.isnan(Q_old):
-            for Q_step in np.linspace(plant.model_data['Q_design'], Q, 5):
-                if Q_step == plant.model_data['Q_design']:
-                    model.busses[plant.model_data['heat_bus_sys']].set_attr(P=Q_step)
-                    model.solve('offdesign', design_path=design, init_path=design)
-                else:
-                    model.busses[plant.model_data['heat_bus_sys']].set_attr(P=Q_step)
-                    model.solve('offdesign', design_path=design)
-        else:
-            for Q_step in np.linspace(Q_old, Q, 5):
-                model.busses[plant.model_data['heat_bus_sys']].set_attr(P=Q_step)
-                model.solve('offdesign', design_path=design)
+        num = max(
+            abs(T_rf_sto - T_rf_sto_old) // 2 + 1,
+            abs(T_ff_sys - T_ff_sys_old) // 2 + 1,
+            abs(T_rf_sys - T_rf_sys_old) // 2 + 1
+        )
+        T_rf_sto_range = np.linspace(T_rf_sto, T_rf_sto_old, num, endpoint=False)[::-1]
+        T_ff_sys_range = np.linspace(T_ff_sys, T_ff_sys_old, num, endpoint=False)[::-1]
+        T_rf_sys_range = np.linspace(T_rf_sys, T_rf_sys_old, num, endpoint=False)[::-1]
+        for i in range(int(num)):
+            rf_sto_conn.set_attr(T=T_rf_sto_range[i])
+            ff_sys_conn.set_attr(T=T_ff_sys_range[i])
+            rf_sys_conn.set_attr(T=T_rf_sys_range[i])
+            model.solve('offdesign', design_path=design)
+
+        for Q_step in np.geomspace(Q, Q_old, 5, endpoint=False)[::-1]:
+            if abs(Q_step - Q) / Q < 0.1:
+                break
+
+            model.busses[plant.model_data['heat_bus_sys']].set_attr(P=Q_step)
+            model.solve('offdesign', design_path=design)
+
+        model.busses[plant.model_data['heat_bus_sys']].set_attr(P=Q)
+        model.solve('offdesign', design_path=design)
 
         if model.lin_dep or model.res[-1] > 1e-3:
             raise TESPyNetworkError
@@ -317,7 +329,12 @@ def sim_IF_discharge(plant, T_ff_sys, T_rf_sys, T_rf_sto, Q):
         model.lin_dep = True
 
     if model.lin_dep or model.res[-1] > 1e-3:
-        return 0, 0, 0, 0, 0, T_rf_sto_old, 0, True
+        model.solve(
+            'offdesign', design_path=design, init_path=design, init_only=True)
+        rf_sto_conn.T.val = rf_sto_conn.T.design - 273.15
+        ff_sys_conn.T.val = ff_sys_conn.T.design - 273.15
+        rf_sys_conn.T.val = rf_sys_conn.T.design - 273.15
+        return 0, 0, 0, 0, 0, T_rf_sto, 0, True
 
     for conn_id, limits in plant.model_data['limiting_mass_flow'].items():
         conn = model.connections[conn_id]
@@ -332,29 +349,29 @@ def sim_IF_discharge(plant, T_ff_sys, T_rf_sys, T_rf_sto, Q):
             for m_val in m_range[::-1]:
                 conn.set_attr(m=m_val)
                 model.solve('offdesign', design_path=design)
-            msg = ('Limiting heat flow due to mass flow restriction in '
-                   'extraction plant: mass flow: ' + str(round(m, 2)) +
-                   'kg/s; maximum mass flow: ' + str(round(m_max, 2)) +
-                    'kg/s.')
+            msg = (
+                'Limiting heat flow due to mass flow restriction in '
+                'extraction plant: mass flow: ' + str(round(m, 2)) + 'kg/s; '
+                'maximum mass flow: ' + str(round(m_max, 2)) + 'kg/s.')
             logging.warning(msg)
 
         elif m < m_min:
-            msg = ('Shutting off plant due to mass flow restriction in '
-                   'extraction plant: mass flow: ' + str(round(m, 2)) +
-                   'kg/s; minimum mass flow: ' + str(round(m_min, 2)) +
-                    'kg/s.')
+            msg = (
+                'Shutting off plant due to mass flow restriction in '
+                'extraction plant: mass flow: ' + str(round(m, 2)) + 'kg/s; '
+                'minimum mass flow: ' + str(round(m_min, 2)) + 'kg/s.')
             logging.warning(msg)
             return 0, 0, 0, 0, 0, T_rf_sto, 0, False
 
         conn.set_attr(m=np.nan)
 
     # storage interface temperatures
-    T_ff_sys = model.connections[plant.model_data['ff_sys']].T.val
-    T_ff_sto = model.connections[plant.model_data['ff_sto']].T.val
-    T_rf_sto = model.connections[plant.model_data['rf_sto']].T.val
+    T_ff_sys = ff_sys_conn.T.val
+    T_ff_sto = ff_sto_conn.T.val
+    T_rf_sto = rf_sto_conn.T.val
 
     # storage mass flow
-    v_sto = model.connections[plant.model_data['ff_sto']].v.val
+    v_sto = ff_sto_conn.v.val
 
     # interface transferred energy params
     Q_sto = model.busses[plant.model_data['heat_bus_sto']].P.val
@@ -424,31 +441,43 @@ def sim_IF_charge(plant, T_rf_sys, T_rf_sto, Q, ttd, T_ff_sto_max):
         T_ff_sto = T_rf_sys - ttd
 
     # specify system parameters
-    T_rf_sto_old = model.connections[plant.model_data['rf_sto']].T.val
     Q_old = model.busses[plant.model_data['heat_bus_sys']].P.val
-    model.busses[plant.model_data['heat_bus_sys']].set_attr(P=Q)
-    model.connections[plant.model_data['rf_sys']].set_attr(T=T_rf_sys)
-    model.connections[plant.model_data['rf_sto']].set_attr(T=T_rf_sto)
-    model.connections[plant.model_data['ff_sto']].set_attr(T=T_ff_sto)
-    model.connections[plant.model_data['ff_sys']].set_attr(
-        v=np.nan, T=np.nan, design=[])
+    rf_sto_conn = model.connections[plant.model_data['rf_sto']]
+    ff_sto_conn = model.connections[plant.model_data['ff_sto']]
+    rf_sys_conn = model.connections[plant.model_data['rf_sys']]
+    ff_sys_conn = model.connections[plant.model_data['ff_sys']]
+    T_rf_sto_old = rf_sto_conn.T.val
+    T_ff_sto_old = ff_sto_conn.T.val
+    T_rf_sys_old = rf_sys_conn.T.val
+
+    model.busses[plant.model_data['heat_bus_sys']].set_attr(P=Q_old)
 
     # solving
-
     try:
         design = plant.new_design
-        if np.isnan(Q_old):
-            for Q_step in np.linspace(plant.model_data['Q_design'], Q, 5):
-                if Q_step == plant.model_data['Q_design']:
-                    model.busses[plant.model_data['heat_bus_sys']].set_attr(P=Q_step)
-                    model.solve('offdesign', design_path=design, init_path=design)
-                else:
-                    model.busses[plant.model_data['heat_bus_sys']].set_attr(P=Q_step)
-                    model.solve('offdesign', design_path=design)
-        else:
-            for Q_step in np.linspace(Q_old, Q, 5):
-                model.busses[plant.model_data['heat_bus_sys']].set_attr(P=Q_step)
-                model.solve('offdesign', design_path=design)
+        num = max(
+            abs(T_rf_sto - T_rf_sto_old) // 2 + 1,
+            abs(T_ff_sto - T_ff_sto_old) // 2 + 1,
+            abs(T_rf_sys - T_rf_sys_old) // 2 + 1
+        )
+        T_rf_sto_range = np.linspace(T_rf_sto, T_rf_sto_old, num, endpoint=False)[::-1]
+        T_ff_sto_range = np.linspace(T_ff_sto, T_ff_sto_old, num, endpoint=False)[::-1]
+        T_rf_sys_range = np.linspace(T_rf_sys, T_rf_sys_old, num, endpoint=False)[::-1]
+        for i in range(int(num)):
+            rf_sto_conn.set_attr(T=T_rf_sto_range[i])
+            ff_sto_conn.set_attr(T=T_ff_sto_range[i])
+            rf_sys_conn.set_attr(T=T_rf_sys_range[i])
+            model.solve('offdesign', design_path=design)
+
+        for Q_step in np.geomspace(Q, Q_old, 5, endpoint=False)[::-1]:
+            if abs(Q_step - Q) / Q < 0.1:
+                break
+
+            model.busses[plant.model_data['heat_bus_sys']].set_attr(P=Q_step)
+            model.solve('offdesign', design_path=design)
+
+        model.busses[plant.model_data['heat_bus_sys']].set_attr(P=Q)
+        model.solve('offdesign', design_path=design)
 
         if model.lin_dep or model.res[-1] > 1e-3:
             raise TESPyNetworkError
@@ -457,9 +486,11 @@ def sim_IF_charge(plant, T_rf_sys, T_rf_sto, Q, ttd, T_ff_sto_max):
         model.lin_dep = True
 
     if model.lin_dep or model.res[-1] > 1e-3:
-        model.print_results()
         model.solve(
             'offdesign', design_path=design, init_path=design, init_only=True)
+        rf_sto_conn.T.val = rf_sto_conn.T.design - 273.15
+        ff_sto_conn.T.val = ff_sto_conn.T.design - 273.15
+        rf_sys_conn.T.val = rf_sys_conn.T.design - 273.15
         return 0, 0, 0, 0, 0, T_rf_sto_old, 0, True
 
     for conn_id, limits in plant.model_data['limiting_mass_flow'].items():
@@ -475,29 +506,29 @@ def sim_IF_charge(plant, T_rf_sys, T_rf_sto, Q, ttd, T_ff_sto_max):
             for m_val in m_range[::-1]:
                 conn.set_attr(m=m_val)
                 model.solve('offdesign', design_path=design)
-            msg = ('Limiting heat flow due to mass flow restriction in '
-                   'injection plant: mass flow: ' + str(round(m, 2)) +
-                   'kg/s; maximum mass flow: ' + str(round(m_max, 2)) +
-                    'kg/s.')
+            msg = (
+                'Limiting heat flow due to mass flow restriction in injection '
+                'plant: mass flow: ' + str(round(m, 2)) + 'kg/s; maximum mass '
+                'flow: ' + str(round(m_max, 2)) + 'kg/s.')
             logging.warning(msg)
 
         elif m < m_min:
-            msg = ('Shutting off plant due to mass flow restriction in '
-                   'injection plant: mass flow: ' + str(round(m, 2)) +
-                   'kg/s; minimum mass flow: ' + str(round(m_min, 2)) +
-                    'kg/s.')
+            msg = (
+                'Shutting off plant due to mass flow restriction in injection '
+                'plant: mass flow: ' + str(round(m, 2)) + 'kg/s; minimum mass '
+                'flow: ' + str(round(m_min, 2)) + 'kg/s.')
             logging.warning(msg)
             return 0, 0, 0, 0, 0, T_rf_sto, 0, False
 
         conn.set_attr(m=np.nan)
 
     # storage interface temperatures
-    T_ff_sys = model.connections[plant.model_data['ff_sys']].T.val
-    T_ff_sto = model.connections[plant.model_data['ff_sto']].T.val
-    T_rf_sto = model.connections[plant.model_data['rf_sto']].T.val
+    T_ff_sys = ff_sys_conn.T.val
+    T_ff_sto = ff_sto_conn.T.val
+    T_rf_sto = rf_sto_conn.T.val
 
     # storage mass flow
-    v_sto = model.connections[plant.model_data['ff_sto']].v.val
+    v_sto = ff_sto_conn.v.val
 
     # interface transferred energy params
     Q_sto = model.busses[plant.model_data['heat_bus_sto']].P.val

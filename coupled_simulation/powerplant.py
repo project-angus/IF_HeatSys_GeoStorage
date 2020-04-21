@@ -24,8 +24,9 @@ logger.define_logging(log_version=True, file_level=logging.DEBUG,
 
 def load_models(cd):
 
-    power_plant_path = os.path.join(cd.working_dir, cd.powerplant_path,
-                        cd.scenario + '.powerplant_ctrl.json')
+    power_plant_path = os.path.join(
+        cd.working_dir, cd.powerplant_path,
+        cd.scenario + '.powerplant_ctrl.json')
     power_plant_models = {}
     with open(power_plant_path) as f:
         power_plant_models.update(json.load(f))
@@ -64,7 +65,8 @@ class model:
     def load_tespy_model(self):
 
         # load tespy models with the network_reader module
-        self.instance = load_network(os.path.join(self.wdir, self.model_data['path']))
+        self.instance = load_network(
+            os.path.join(self.wdir, self.model_data['path']))
         self.instance.set_attr(
             m_range=self.model_data['m_range'], iterinfo=False)
         if self.model_data['debug'] is True:
@@ -165,7 +167,6 @@ def calc_interface_params(ppinfo, T_ff_sys, T_rf_sys, T_rf_sto, Q, mode):
             T_ff_sto = T_rf_sto
             return 0, 0, 0, 0, T_ff_sto, T_rf_sto, 0, False
 
-
         # check for minimum heat transfer
         Q_min = plant.model_data['Q_min'] * plant.model_data['Q_design']
         if Q < Q_min:
@@ -232,6 +233,7 @@ def calc_interface_params(ppinfo, T_ff_sys, T_rf_sys, T_rf_sto, Q, mode):
                '\'discharging\'.')
         logging.error(msg)
         raise ValueError(msg)
+
 
 def sim_IF_discharge(plant, T_ff_sys, T_rf_sys, T_rf_sto, Q):
     """
@@ -300,10 +302,10 @@ def sim_IF_discharge(plant, T_ff_sys, T_rf_sys, T_rf_sto, Q):
     try:
         design = plant.new_design
         num = max(
-            abs(T_rf_sto - T_rf_sto_old) // 2 + 1,
-            abs(T_ff_sys - T_ff_sys_old) // 2 + 1,
-            abs(T_rf_sys - T_rf_sys_old) // 2 + 1
-        )
+            abs(T_rf_sto - T_rf_sto_old) // 2,
+            abs(T_ff_sys - T_ff_sys_old) // 2,
+            abs(T_rf_sys - T_rf_sys_old) // 2
+        ) + 1
         T_rf_sto_range = np.linspace(T_rf_sto, T_rf_sto_old, num, endpoint=False)[::-1]
         T_ff_sys_range = np.linspace(T_ff_sys, T_ff_sys_old, num, endpoint=False)[::-1]
         T_rf_sys_range = np.linspace(T_rf_sys, T_rf_sys_old, num, endpoint=False)[::-1]
@@ -326,7 +328,8 @@ def sim_IF_discharge(plant, T_ff_sys, T_rf_sys, T_rf_sto, Q):
         if model.lin_dep or model.res[-1] > 1e-3:
             raise TESPyNetworkError
 
-    except (TESPyNetworkError, ValueError):
+    except (TESPyNetworkError, ValueError) as e:
+        print(e)
         model.lin_dep = True
 
     if model.lin_dep or model.res[-1] > 1e-3:
@@ -451,17 +454,16 @@ def sim_IF_charge(plant, T_rf_sys, T_rf_sto, Q, ttd, T_ff_sto_max):
     T_rf_sto_old = rf_sto_conn.T.val
     T_ff_sto_old = ff_sto_conn.T.val
     T_rf_sys_old = rf_sys_conn.T.val
-
     heat_bus_sys.set_attr(P=Q_old)
 
     # solving
     try:
         design = plant.new_design
         num = max(
-            abs(T_rf_sto - T_rf_sto_old) // 2 + 1,
-            abs(T_ff_sto - T_ff_sto_old) // 2 + 1,
-            abs(T_rf_sys - T_rf_sys_old) // 2 + 1
-        )
+            abs(T_rf_sto - T_rf_sto_old) // 2,
+            abs(T_ff_sto - T_ff_sto_old) // 2,
+            abs(T_rf_sys - T_rf_sys_old) // 2
+        ) + 1
         T_rf_sto_range = np.linspace(T_rf_sto, T_rf_sto_old, num, endpoint=False)[::-1]
         T_ff_sto_range = np.linspace(T_ff_sto, T_ff_sto_old, num, endpoint=False)[::-1]
         T_rf_sys_range = np.linspace(T_rf_sys, T_rf_sys_old, num, endpoint=False)[::-1]
@@ -469,26 +471,28 @@ def sim_IF_charge(plant, T_rf_sys, T_rf_sto, Q, ttd, T_ff_sto_max):
             rf_sto_conn.set_attr(T=T_rf_sto_range[i])
             ff_sto_conn.set_attr(T=T_ff_sto_range[i])
             rf_sys_conn.set_attr(T=T_rf_sys_range[i])
-            heat_bus_sys.set_attr(P=plant.model_data['Q_design'])
             model.solve('offdesign', design_path=design)
 
-        for Q_step in np.geomspace(Q, Q_old, 5, endpoint=False)[::-1]:
+        for Q_step in np.geomspace(Q, Q_old, 10, endpoint=False)[::-1]:
             if abs(Q_step - Q) / Q < 0.1:
                 break
 
             heat_bus_sys.set_attr(P=Q_step)
             model.solve('offdesign', design_path=design)
 
-        heat_bus_sys.set_attr(P=Q)
-        model.solve('offdesign', design_path=design)
+        if abs(Q_step - Q) / Q > 1e-9:
+            heat_bus_sys.set_attr(P=Q)
+            model.solve('offdesign', design_path=design)
 
         if model.lin_dep or model.res[-1] > 1e-3:
             raise TESPyNetworkError
 
-    except (TESPyNetworkError, ValueError):
+    except (TESPyNetworkError, ValueError) as e:
+        print(e)
         model.lin_dep = True
 
     if model.lin_dep or model.res[-1] > 1e-3:
+
         # back to design case
         heat_bus_sys.set_attr(P=plant.model_data['Q_design'])
         rf_sys_conn.set_attr(T=plant.model_data['T_rf_sys_design'])

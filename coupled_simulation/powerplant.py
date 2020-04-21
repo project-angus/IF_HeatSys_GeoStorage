@@ -301,15 +301,15 @@ def sim_IF_discharge(plant, T_ff_sys, T_rf_sys, T_rf_sto, Q):
     # solving
     try:
         design = plant.new_design
-        num = max(
+        num = int(max(
             abs(T_rf_sto - T_rf_sto_old) // 2,
             abs(T_ff_sys - T_ff_sys_old) // 2,
             abs(T_rf_sys - T_rf_sys_old) // 2
-        ) + 1
+        )) + 1
         T_rf_sto_range = np.linspace(T_rf_sto, T_rf_sto_old, num, endpoint=False)[::-1]
         T_ff_sys_range = np.linspace(T_ff_sys, T_ff_sys_old, num, endpoint=False)[::-1]
         T_rf_sys_range = np.linspace(T_rf_sys, T_rf_sys_old, num, endpoint=False)[::-1]
-        for i in range(int(num)):
+        for i in range(num):
             rf_sto_conn.set_attr(T=T_rf_sto_range[i])
             ff_sys_conn.set_attr(T=T_ff_sys_range[i])
             rf_sys_conn.set_attr(T=T_rf_sys_range[i])
@@ -459,15 +459,15 @@ def sim_IF_charge(plant, T_rf_sys, T_rf_sto, Q, ttd, T_ff_sto_max):
     # solving
     try:
         design = plant.new_design
-        num = max(
+        num = int(max(
             abs(T_rf_sto - T_rf_sto_old) // 2,
             abs(T_ff_sto - T_ff_sto_old) // 2,
             abs(T_rf_sys - T_rf_sys_old) // 2
-        ) + 1
+        )) + 1
         T_rf_sto_range = np.linspace(T_rf_sto, T_rf_sto_old, num, endpoint=False)[::-1]
         T_ff_sto_range = np.linspace(T_ff_sto, T_ff_sto_old, num, endpoint=False)[::-1]
         T_rf_sys_range = np.linspace(T_rf_sys, T_rf_sys_old, num, endpoint=False)[::-1]
-        for i in range(int(num)):
+        for i in range(num):
             rf_sto_conn.set_attr(T=T_rf_sto_range[i])
             ff_sto_conn.set_attr(T=T_ff_sto_range[i])
             rf_sys_conn.set_attr(T=T_rf_sys_range[i])

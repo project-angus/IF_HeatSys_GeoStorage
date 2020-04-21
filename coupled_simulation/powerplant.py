@@ -330,12 +330,12 @@ def sim_IF_discharge(plant, T_ff_sys, T_rf_sys, T_rf_sto, Q):
         model.lin_dep = True
 
     if model.lin_dep or model.res[-1] > 1e-3:
-        model.solve(
-            'offdesign', design_path=design, init_path=design, init_only=True)
-        rf_sto_conn.T.val = rf_sto_conn.T.design - 273.15
-        ff_sys_conn.T.val = ff_sys_conn.T.design - 273.15
-        rf_sys_conn.T.val = rf_sys_conn.T.design - 273.15
+        # back to design case
         heat_bus_sys.set_attr(P=plant.model_data['Q_design'])
+        ff_sys_conn.set_attr(T=plant.model_data['T_ff_sys_design'])
+        rf_sys_conn.set_attr(T=plant.model_data['T_rf_sys_design'])
+        rf_sto_conn.set_attr(T=plant.model_data['T_rf_sto_design'])
+        model.solve('offdesign', design_path=design, init_path=design)
         return 0, 0, 0, 0, 0, T_rf_sto, 0, True
 
     for conn_id, limits in plant.model_data['limiting_mass_flow'].items():
@@ -489,11 +489,12 @@ def sim_IF_charge(plant, T_rf_sys, T_rf_sto, Q, ttd, T_ff_sto_max):
         model.lin_dep = True
 
     if model.lin_dep or model.res[-1] > 1e-3:
-        model.solve(
-            'offdesign', design_path=design, init_path=design, init_only=True)
-        rf_sto_conn.T.val = rf_sto_conn.T.design - 273.15
-        ff_sto_conn.T.val = ff_sto_conn.T.design - 273.15
-        rf_sys_conn.T.val = rf_sys_conn.T.design - 273.15
+        # back to design case
+        heat_bus_sys.set_attr(P=plant.model_data['Q_design'])
+        rf_sys_conn.set_attr(T=plant.model_data['T_rf_sys_design'])
+        ff_sto_conn.set_attr(T=plant.model_data['T_ff_sto_design'])
+        rf_sto_conn.set_attr(T=plant.model_data['T_rf_sto_design'])
+        model.solve('offdesign', design_path=design, init_path=design)
         return 0, 0, 0, 0, 0, T_rf_sto_old, 0, True
 
     for conn_id, limits in plant.model_data['limiting_mass_flow'].items():

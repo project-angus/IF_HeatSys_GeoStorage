@@ -473,7 +473,7 @@ def sim_IF_charge(plant, T_rf_sys, T_rf_sto, Q, ttd, T_ff_sto_max):
             rf_sys_conn.set_attr(T=T_rf_sys_range[i])
             model.solve('offdesign', design_path=design)
 
-        for Q_step in np.geomspace(Q, Q_old, 10, endpoint=False)[::-1]:
+        for Q_step in np.geomspace(Q, Q_old, 5, endpoint=False)[::-1]:
             if abs(Q_step - Q) / Q < 0.1:
                 break
 

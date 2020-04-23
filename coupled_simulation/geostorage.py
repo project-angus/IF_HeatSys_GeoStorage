@@ -53,6 +53,14 @@ class OgsKb1(GeoStorageSimulator):
 
         info('GEOSTORAGE inflow temperature: {}'.format(T_ff_sto))
 
+        st_file = os.path.join(self.__directory, self.__basename + '.st')
+        copy(os.path.join(self.__directory, '_' + self.__basename + '.st'), st_file)
+        try:  # ATES
+            bc_file = os.path.join(self.__directory, self.__basename + '.bc')
+            copy(os.path.join(self.__directory, '_' + self.__basename + '.bc'), bc_file)
+        except:
+            pass
+
         for i in range(len(self.__distribution)):
             flow_rate = max(1.e-6,  # required for eskilson model
                             self.__factor * float(self.__distribution[i]) *
@@ -60,10 +68,6 @@ class OgsKb1(GeoStorageSimulator):
             info('GEOSTORAGE flow rate {}: {}'.format(i, flow_rate))
 
             # ST-FILE
-            st_file = os.path.join(self.__directory, self.__basename + '.st')
-
-            copy(os.path.join(self.__directory, '_' + self.__basename + '.st'), st_file)
-
             replace(st_file, "$INFLOW_TEMPERATURE", str(T_ff_sto))
             # ATES
             replace(st_file, "$WARM_{}".format(i), str(flow_rate))
@@ -74,9 +78,6 @@ class OgsKb1(GeoStorageSimulator):
             # BC-FILE
             # ATES
             try:
-                bc_file = os.path.join(self.__directory, self.__basename + '.bc')
-                copy(os.path.join(self.__directory, '_' + self.__basename + '.bc'), bc_file)
-
                 replace(bc_file, "$INFLOW_TEMPERATURE", str(T_ff_sto + 273.15))
                 if storage_mode == 'charging':
                     replace(bc_file, "$INFLOW_POSITION_{0}".format(i), "WARM_{0}".format(i))

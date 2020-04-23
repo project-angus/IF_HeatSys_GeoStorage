@@ -54,9 +54,10 @@ class OgsKb1(GeoStorageSimulator):
         info('GEOSTORAGE inflow temperature: {}'.format(T_ff_sto))
 
         st_file = os.path.join(self.__directory, self.__basename + '.st')
+        bc_file = os.path.join(self.__directory, self.__basename + '.bc')  # ATES
+
         copy(os.path.join(self.__directory, '_' + self.__basename + '.st'), st_file)
         try:  # ATES
-            bc_file = os.path.join(self.__directory, self.__basename + '.bc')
             copy(os.path.join(self.__directory, '_' + self.__basename + '.bc'), bc_file)
         except:
             pass
@@ -70,8 +71,12 @@ class OgsKb1(GeoStorageSimulator):
             # ST-FILE
             replace(st_file, "$INFLOW_TEMPERATURE", str(T_ff_sto))
             # ATES
-            replace(st_file, "$WARM_{}".format(i), str(flow_rate))
-            replace(st_file, "$COLD_{}".format(i), str(-flow_rate))
+            if storage_mode == 'charging':
+                replace(st_file, "$WARM_{}".format(i), str(flow_rate))
+                replace(st_file, "$COLD_{}".format(i), str(-flow_rate))
+            else:
+                replace(st_file, "$WARM_{}".format(i), str(-flow_rate))
+                replace(st_file, "$COLD_{}".format(i), str(flow_rate))
             # BTES
             replace(st_file, "$FLOW_RATE_{}".format(i), str(flow_rate))
 
@@ -113,6 +118,7 @@ class OgsKb1(GeoStorageSimulator):
         :param storage_mode: (string) 'charging' or 'discharging'
         :return: return flow temperature from geostorage
         """
+        t_rf_sto = 0
 
         for i in range(len(self.__distribution)):
             try:
@@ -120,15 +126,15 @@ class OgsKb1(GeoStorageSimulator):
                                        self.__basename + '_HEAT_TRANSPORT_Contraflow_{}.tec'.format(i))) as file:
                     line = file.readlines()[1]
 
-                    t_rf_sto = float(line.split()[2])
+                    t_rf_sto += float(line.split()[2]) * float(self.__distribution[i])
             except:
                 position = 'PNT_COLD' if storage_mode == 'charging' else 'PNT_WARM'
                 try:
-                    with open(os.path.join(self.__directory, self.__basename + '_time_{}_{}.tec'.format(position, i))) as file:
+                    with open(os.path.join(self.__directory,
+                                           self.__basename + '_time_{}_{}.tec'.format(position, i))) as file:
                         line = file.readlines()[4]
-                        t_rf_sto = float(line.split()[1]) - 273.15
+                        t_rf_sto += (float(line.split()[1]) - 273.15) * float(self.__distribution[i])
                 except:
-                    t_fr_sto = None
                     raise RuntimeError("Postprocess - No output for storage {}".format(i))
 
         return t_rf_sto

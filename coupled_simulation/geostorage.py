@@ -128,15 +128,16 @@ class OgsKb1(GeoStorageSimulator):
 
                     t_rf_sto += float(line.split()[2]) * float(self.__distribution[i])
             except:
-                position = 'PNT_COLD' if storage_mode == 'charging' else 'PNT_WARM'
+                position = 'COLD' if storage_mode == 'charging' else 'WARM'
                 try:
                     with open(os.path.join(self.__directory,
-                                           self.__basename + '_time_{}_{}.tec'.format(position, i))) as file:
-                        line = file.readlines()[4]
+                                           self.__basename + '_ply_{}_{}_HEAT_TRANSPORT_averaged.tec'.format(
+                                               position, i))) as file:
+                        line = file.readlines()[2]
                         t_rf_sto += (float(line.split()[1]) - 273.15) * float(self.__distribution[i])
                 except:
                     raise RuntimeError("Postprocess - No output for storage {}".format(i))
-
+                
         return t_rf_sto
 
 

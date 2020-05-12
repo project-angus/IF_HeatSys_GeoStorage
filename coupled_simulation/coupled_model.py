@@ -35,6 +35,7 @@ class CoupledModel:
 
     def prepare_timestepping(self):
         """
+        - delete output files from previous simulations
         - copy _HEAT_TRANSPORT.IC,  _LIQUID_FLOW.IC such that
         - initializes return temperature from storage for power plant model (takes feed-in temperture of heat network)
         pressure and temperature field are updated from primary_variables-file in time step loop
@@ -44,7 +45,9 @@ class CoupledModel:
                                                                 or f.endswith(".vtk")
                                                                 or f.endswith(".txt")
                                                                 or f.endswith(".asc")
-                                                                or f.endswith(".bak"))]
+                                                                or f.endswith(".bak")
+                                                                or f.startswith("HEAT_TRANSPORT")
+                                                                or f.startswith("LIQUID_FLOW"))]
         for f in filelist:
             os.remove(os.path.join(self.__directory, f))
 
@@ -230,7 +233,7 @@ class CoupledModel:
         :return:
         """
         try:
-            os.remove(os.path.join(self.__directory, self.__basename + '0000.vtk'))
+            #os.remove(os.path.join(self.__directory, self.__basename + '0000.vtk'))
 
             if t_step % self.__prop.save_nth_t_step == 0:
                 info('GEOSTORAGE keep vtk')

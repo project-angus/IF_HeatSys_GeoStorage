@@ -139,7 +139,7 @@ class OgsKb1(GeoStorageSimulator):
             try:
                 with open(os.path.join(self.__directory,
                                        self.__basename + '_HEAT_TRANSPORT_Contraflow_{}.tec'.format(i))) as file:
-                    line = file.readlines()[2]
+                    line = file.readlines()[0]
 
                     t_rf_sto += float(line.split()[2]) * float(self.__distribution[i])
             except:
@@ -148,7 +148,7 @@ class OgsKb1(GeoStorageSimulator):
                     with open(os.path.join(self.__directory,
                                            self.__basename + '_ply_{}_{}_HEAT_TRANSPORT_averaged.tec'.format(
                                                position, i))) as file:
-                        line = file.readlines()[2]
+                        line = file.readlines()[0]
                         t_rf_sto += (float(line.split()[1]) - 273.15) * float(self.__distribution[i])
                 except:
                     raise RuntimeError("Postprocess - No output for storage {}".format(i))

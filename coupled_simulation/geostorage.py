@@ -39,28 +39,43 @@ class OgsKb1(GeoStorageSimulator):
         self.__density = float(data['density'])
         # print(data)
 
-    def preprocess(self, T_ff_sto, m_sto, storage_mode):
+    def preprocess(self, time_step, time_step_length, current_time, iter, T_ff_sto, m_sto, storage_mode):
         """
         - write input files for geostorage simulation
         - Requirements:
             - _*.st prepared with keywords $WARM, $COLD for input / output source terms
             -  *.bc prepared with keywords $TYPE, $VALUE for boundary condition at inlet
+        :param time_step: (float)
+        :param time_step_length: (float)        
+        :param current_time: (datetime.timedelta)
+        :param iter: (int) iteration number
         :param T_ff_sto: feed flow temperature to geostorage  (in *.bc )
         :param m_sto: (float) mass flow rate through heat exchanger at geostorage side (in *.st)
         :param storage_mode: (str) 'charging' or 'discharging'
         :return:
         """
 
+        with open(os.path.join(self.__directory, "logger.txt"), 'a+') as file:
+            if(iter == 0):
+                file.write("Interface time step: {} - {}\n".format(time_step, current_time))
+
+            file.write("Iteration: {}\n".format(iter))
+            file.close()
+
         info('GEOSTORAGE inflow temperature: {}'.format(T_ff_sto))
 
         st_file = os.path.join(self.__directory, self.__basename + '.st')
+        tim_file = os.path.join(self.__directory, self.__basename + '.tim')
         bc_file = os.path.join(self.__directory, self.__basename + '.bc')  # ATES
 
         copy(os.path.join(self.__directory, '_' + self.__basename + '.st'), st_file)
+        copy(os.path.join(self.__directory, '_' + self.__basename + '.tim'), tim_file)
         try:  # ATES
             copy(os.path.join(self.__directory, '_' + self.__basename + '.bc'), bc_file)
         except:
             pass
+
+        replace(tim_file, "!START_TIME", str(time_step*time_step_length))
 
         for i in range(len(self.__distribution)):
             flow_rate = max(1.e-6,  # required for eskilson model
@@ -69,25 +84,25 @@ class OgsKb1(GeoStorageSimulator):
             info('GEOSTORAGE flow rate {}: {}'.format(i, flow_rate))
 
             # ST-FILE
-            replace(st_file, "$INFLOW_TEMPERATURE", str(T_ff_sto))
+            replace(st_file, "!INFLOW_TEMPERATURE", str(T_ff_sto))
             # ATES
             if storage_mode == 'charging':
-                replace(st_file, "$WARM_{}".format(i), str(flow_rate))
-                replace(st_file, "$COLD_{}".format(i), str(-flow_rate))
+                replace(st_file, "!WARM_{}".format(i), str(flow_rate))
+                replace(st_file, "!COLD_{}".format(i), str(-flow_rate))
             else:
-                replace(st_file, "$WARM_{}".format(i), str(-flow_rate))
-                replace(st_file, "$COLD_{}".format(i), str(flow_rate))
+                replace(st_file, "!WARM_{}".format(i), str(-flow_rate))
+                replace(st_file, "!COLD_{}".format(i), str(flow_rate))
             # BTES
-            replace(st_file, "$FLOW_RATE_{}".format(i), str(flow_rate))
+            replace(st_file, "!FLOW_RATE_{}".format(i), str(flow_rate))
 
             # BC-FILE
             # ATES
             try:
-                replace(bc_file, "$INFLOW_TEMPERATURE", str(T_ff_sto + 273.15))
+                replace(bc_file, "!INFLOW_TEMPERATURE", str(T_ff_sto + 273.15))
                 if storage_mode == 'charging':
-                    replace(bc_file, "$INFLOW_POSITION_{0}".format(i), "WARM_{0}".format(i))
+                    replace(bc_file, "!INFLOW_POSITION_{0}".format(i), "WARM_{0}".format(i))
                 elif storage_mode == 'discharging':
-                    replace(bc_file, "$INFLOW_POSITION_{0}".format(i), "COLD_{0}".format(i))
+                    replace(bc_file, "!INFLOW_POSITION_{0}".format(i), "COLD_{0}".format(i))
                 elif storage_mode == 'shutin':
                     info('GEOSTORAGE No BCs and STs')
                     os.remove(st_file)
@@ -124,7 +139,7 @@ class OgsKb1(GeoStorageSimulator):
             try:
                 with open(os.path.join(self.__directory,
                                        self.__basename + '_HEAT_TRANSPORT_Contraflow_{}.tec'.format(i))) as file:
-                    line = file.readlines()[1]
+                    line = file.readlines()[2]
 
                     t_rf_sto += float(line.split()[2]) * float(self.__distribution[i])
             except:
@@ -137,9 +152,8 @@ class OgsKb1(GeoStorageSimulator):
                         t_rf_sto += (float(line.split()[1]) - 273.15) * float(self.__distribution[i])
                 except:
                     raise RuntimeError("Postprocess - No output for storage {}".format(i))
-                
-        return t_rf_sto
 
+        return t_rf_sto
 
 class GeoStorage:
     def __init__(self, cd):
@@ -184,14 +198,18 @@ class GeoStorage:
     def storage_type(self):
         return self.__specification['storage_type']
 
-    def run_storage_simulation(self, T_ff_sto, m_sto, storage_mode):
+    def run_storage_simulation(self, time_step, time_step_length, current_time, iter, T_ff_sto, m_sto, storage_mode):
         """
+        :param time_step: (float)
+        :param time_step_length: (float)
+        :param current_time: (datetime.timedelta)
+        :param iter: (int) iteration number
         :param T_ff_sto: (float) feed flow temperature to geostorage
         :param m_sto: (float) mass flow rate through heat exchanger at geostorage side
         :param storage_mode: (str) 'charging' or 'discharging'
         :return: return flow temperature from geostorage
         """
-        self.__simulator.preprocess(T_ff_sto, m_sto, storage_mode)
+        self.__simulator.preprocess(time_step, time_step_length, current_time, iter, T_ff_sto, m_sto, storage_mode)
         self.__simulator.run()
 
         T_rf_sto = self.__simulator.postprocess(storage_mode)

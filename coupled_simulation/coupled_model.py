@@ -35,11 +35,22 @@ class CoupledModel:
 
     def prepare_timestepping(self):
         """
+        - delete output files from previous simulations
         - copy _HEAT_TRANSPORT.IC,  _LIQUID_FLOW.IC such that
         - initializes return temperature from storage for power plant model (takes feed-in temperture of heat network)
         pressure and temperature field are updated from primary_variables-file in time step loop
         :return: initial return temperature from storage for power plants
         """
+        filelist = [f for f in os.listdir(self.__directory) if (f.endswith(".tec")
+                                                                or f.endswith(".vtk")
+                                                                or f.endswith(".txt")
+                                                                or f.endswith(".asc")
+                                                                or f.endswith(".bak")
+                                                                or f.startswith("HEAT_TRANSPORT")
+                                                                or f.startswith("LIQUID_FLOW"))]
+        for f in filelist:
+            os.remove(os.path.join(self.__directory, f))
+
         try:
             shutil.copy(os.path.join(self.__directory, '_HEAT_TRANSPORT.IC'),
                         os.path.join(self.__directory,
@@ -88,7 +99,9 @@ class CoupledModel:
 
             #storage_mode = 'charging' if Q_target > 1.e-3 elif Q_target < -1.e-3 'discharging' else 'shutin'
             Q_sto, Q_sys, P_plant, ti_plant, T_ff_sto, T_rf_sto, v_sto, pp_err = \
-                self.execute_timestep(Q_target, T_ff_sys, T_rf_sys, T_rf_sto_0[storage_mode], storage_mode)
+                self.execute_timestep(t_step, current_time,
+                                      Q_target, T_ff_sys, T_rf_sys, T_rf_sto_0[storage_mode],
+                                      storage_mode)
 
             T_rf_sto_0[storage_mode] = T_rf_sto
 
@@ -131,10 +144,12 @@ class CoupledModel:
 
         return Q_target, T_ff_sys, T_rf_sys
 
-    def execute_timestep(self, Q_target, T_ff_sys, T_rf_sys, T_rf_sto, storage_mode):
+    def execute_timestep(self, time_step, current_time, Q_target, T_ff_sys, T_rf_sys, T_rf_sto, storage_mode):
         """
         - contains interation loop
         - imitialize T_rf_sto with T_ff_sys
+        :param time_step: (float) !starts with zero
+        :param current_time: (datetime.timedelta)
         :param Q_target: (float) Heat to heat network
         :param T_ff_sys: (float) temperature to heat network
         :param T_rf_sys: (float) temperature from heat network
@@ -165,14 +180,18 @@ class CoupledModel:
 
             info('POWERPLANT calculation completed')
             if v_sto == 0:
-                storage_mode =  'shutin'
-                T_rf_sto_geo, v_sto_geo = self.__gs.run_storage_simulation(0., 1.e-3, storage_mode)
+                storage_mode = 'shutin'
+                T_rf_sto_geo, v_sto_geo = self.__gs.run_storage_simulation(time_step, self.__prop.t_step_length,
+                                                                           current_time, iter,
+                                                                           0., 1.e-3, storage_mode)
                 T_rf_sto_geo = T_rf_sto
                 v_sto_geo = 0.
                 Q = 0.
             else:
                 # geostorage
-                T_rf_sto_geo, v_sto_geo = self.__gs.run_storage_simulation(T_ff_sto, v_sto, storage_mode)
+                T_rf_sto_geo, v_sto_geo = self.__gs.run_storage_simulation(time_step, self.__prop.t_step_length,
+                                                                           current_time, iter,
+                                                                           T_ff_sto, v_sto, storage_mode)
                 # evaluate
                 info('GEOSTORAGE return temperature: {}'.format(T_rf_sto_geo))
 
@@ -214,7 +233,7 @@ class CoupledModel:
         :return:
         """
         try:
-            os.remove(os.path.join(self.__directory, self.__basename + '0000.vtk'))
+            #os.remove(os.path.join(self.__directory, self.__basename + '0000.vtk'))
 
             if t_step % self.__prop.save_nth_t_step == 0:
                 info('GEOSTORAGE keep vtk')
@@ -235,18 +254,18 @@ class CoupledModel:
                         self.__directory, self.__basename + '_LIQUID_FLOW_domain_primary_variables.txt'),
                                 os.path.join(self.__directory, 'LIQUID_FLOW_{}.IC'.format(t_step)))
 
-            for pnt in self.__gs.output_points():
-                info('{} {}'.format(pnt, t_step))
+            #for pnt in self.__gs.output_points():
+            #    info('{} {}'.format(pnt, t_step))
 
-                file = open(os.path.join(self.__directory, self.__basename + '_time_{}.tec'.format(pnt)), 'r')
-                for line in file:
-                    w = line
-                file.close()
+            #    file = open(os.path.join(self.__directory, self.__basename + '_time_{}.tec'.format(pnt)), 'r')
+            #    for line in file:
+            #        w = line
+            #    file.close()
 
-                file = open(os.path.join(self.__directory, self.__basename + '_point_{}.txt'.format(pnt)),
-                            'w' if t_step == 0 else 'a')
-                file.write('{}\t{}\n'.format(t_step * self.__prop.t_step_length, w.split()[-1]))
-                file.close()
+            #    file = open(os.path.join(self.__directory, self.__basename + '_point_{}.txt'.format(pnt)),
+            #                'w' if t_step == 0 else 'a')
+            #    file.write('{}\t{}\n'.format(t_step * self.__prop.t_step_length, w.split()[-1]))
+            #    file.close()
         except:
             pass
 

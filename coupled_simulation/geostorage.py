@@ -78,7 +78,7 @@ class OgsKb1(GeoStorageSimulator):
         replace(tim_file, "!START_TIME", str(time_step*time_step_length))
 
         for i in range(len(self.__distribution)):
-            flow_rate = max(1.e-6,  # required for eskilson model
+            flow_rate = max(.0,  # required for eskilson model
                             self.__factor * float(self.__distribution[i]) *
                             m_sto / self.__density)
             info('GEOSTORAGE flow rate {}: {}'.format(i, flow_rate))
@@ -139,8 +139,7 @@ class OgsKb1(GeoStorageSimulator):
             try:
                 with open(os.path.join(self.__directory,
                                        self.__basename + '_HEAT_TRANSPORT_Contraflow_{}.tec'.format(i))) as file:
-                    line = file.readlines()[0]
-
+                    line = file.readlines()[-1]
                     t_rf_sto += float(line.split()[2]) * float(self.__distribution[i])
             except:
                 position = 'COLD' if storage_mode == 'charging' else 'WARM'

@@ -181,9 +181,10 @@ class CoupledModel:
             info('POWERPLANT calculation completed')
             if v_sto == 0:
                 storage_mode = 'shutin'
+                info('GEOSTORAGE shutin')
                 T_rf_sto_geo, v_sto_geo = self.__gs.run_storage_simulation(time_step, self.__prop.t_step_length,
                                                                            current_time, iter,
-                                                                           0., 1.e-3, storage_mode)
+                                                                           0., 0., storage_mode)
                 T_rf_sto_geo = T_rf_sto
                 v_sto_geo = 0.
                 Q = 0.

@@ -17,6 +17,7 @@ class Properties:
         # self.auto_eval_output = True if self.eval_output == "True" else False
         path = self.working_dir = os.path.abspath(path).strip('.main_ctrl.json')
 
+        # print(self.__dict__)
         self.scenario = os.path.basename(path)
         self.working_dir = os.path.dirname(path)  # + '/'  # to remove
         self.t_start = datetime.datetime.strptime(self.t_start, '%Y-%m-%d %H:%M:%S')

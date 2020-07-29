@@ -98,6 +98,7 @@ class model:
         # offdesign test
         self.instance.solve('offdesign', design_path=self.new_design,
                             init_path=self.new_design)
+        # self.instance.print_results()
 
 
 def calc_interface_params(ppinfo, T_ff_sys, T_rf_sys, T_rf_sto, Q, mode):

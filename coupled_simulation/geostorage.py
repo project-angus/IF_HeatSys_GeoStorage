@@ -5,6 +5,7 @@ from subprocess import call
 from abc import ABC, abstractmethod
 from tespy.tools.helpers import modify_path_os
 from shutil import copy
+import fileinput, sys
 from pathlib import Path
 
 import fileinput
@@ -56,7 +57,7 @@ class OgsKb1(GeoStorageSimulator):
         """
 
         with open(os.path.join(self.__directory, "logger.txt"), 'a+') as file:
-            if(iter == 0):
+            if iter == 0:
                 file.write("Interface time step: {} - {}\n".format(time_step, current_time))
 
             file.write("Iteration: {}\n".format(iter))
@@ -95,8 +96,7 @@ class OgsKb1(GeoStorageSimulator):
             # BTES
             replace(st_file, "!FLOW_RATE_{}".format(i), str(flow_rate))
 
-            # BC-FILE
-            # ATES
+            # BC-FILE - ATES
             try:
                 replace(bc_file, "!INFLOW_TEMPERATURE", str(T_ff_sto + 273.15))
                 if storage_mode == 'charging':
@@ -104,13 +104,17 @@ class OgsKb1(GeoStorageSimulator):
                 elif storage_mode == 'discharging':
                     replace(bc_file, "!INFLOW_POSITION_{0}".format(i), "COLD_{0}".format(i))
                 elif storage_mode == 'shutin':
-                    info('GEOSTORAGE No BCs and STs')
-                    os.remove(st_file)
-                    os.remove(bc_file)
+                    for line in fileinput.input(bc_file, inplace=True):
+                        if "!INFLOW_POSITION_{0}".format(i) in line:
+                            line = line.replace("POINT", "INVALID")
+                            line = line.replace("POLYLINE", "INVALID")
+                            line = line.replace("!INFLOW_POSITION_{0}".format(i), "WARM_{0}".format(i))
+                        sys.stdout.write(line)
                 else:
                     raise RuntimeError("Preprocess - Storage operation type unknown")
             except:
                 pass
+
 
     def run(self):
         """
@@ -174,7 +178,7 @@ class GeoStorage:
         if self.__specification['simulator_name'] == 'ogs_kb1':
             info('GEOSTORAGE simulator is OGS_kb1')
             self.__simulator = OgsKb1({'simulator_file': self.__specification['simulator_file'],
-                                        'simulation_files': self.__specification['simulation_files'],
+                                       'simulation_files': self.__specification['simulation_files'],
                                        'factor': self.__specification['factor'],
                                        'distribution': self.__specification['distribution'],
                                        'density': self.__specification['density']

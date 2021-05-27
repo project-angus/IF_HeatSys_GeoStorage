@@ -1,12 +1,5 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-Created on Mon Feb 12 15:17:46 2018
-
-@author: witte
-"""
-
-# %% imports
 
 import numpy as np
 import os
@@ -77,17 +70,17 @@ class model:
             P=self.model_data['Q_design'])
 
         # design system temperatures
-        self.instance.connections[self.model_data['ff_sys']].set_attr(
+        self.instance.get_conn(self.model_data['ff_sys']].set_attr(
             T=self.model_data['T_ff_sys_design'])
 
-        self.instance.connections[self.model_data['rf_sys']].set_attr(
+        self.instance.get_conn(self.model_data['rf_sys']).set_attr(
             T=self.model_data['T_rf_sys_design'])
 
         # design storage temperatures
-        self.instance.connections[self.model_data['ff_sto']].set_attr(
+        self.instance.get_conn(self.model_data['ff_sto']).set_attr(
             T=self.model_data['T_ff_sto_design'])
 
-        self.instance.connections[self.model_data['rf_sto']].set_attr(
+        self.instance.get_conn(self.model_data['rf_sto']).set_attr(
             T=self.model_data['T_rf_sto_design'])
 
         # solve design case and save to path
@@ -287,10 +280,10 @@ def sim_IF_discharge(plant, T_ff_sys, T_rf_sys, T_rf_sto, Q):
     model = plant.instance
 
     # specify system parameters
-    rf_sto_conn = model.connections[plant.model_data['rf_sto']]
-    ff_sto_conn = model.connections[plant.model_data['ff_sto']]
-    rf_sys_conn = model.connections[plant.model_data['rf_sys']]
-    ff_sys_conn = model.connections[plant.model_data['ff_sys']]
+    rf_sto_conn = model.get_conn(plant.model_data['rf_sto'])
+    ff_sto_conn = model.get_conn(plant.model_data['ff_sto'])
+    rf_sys_conn = model.get_conn(plant.model_data['rf_sys'])
+    ff_sys_conn = model.get_conn(plant.model_data['ff_sys'])
     heat_bus_sys = model.busses[plant.model_data['heat_bus_sys']]
     Q_old = heat_bus_sys.P.val
     T_rf_sto_old = rf_sto_conn.T.val
@@ -343,7 +336,7 @@ def sim_IF_discharge(plant, T_ff_sys, T_rf_sys, T_rf_sto, Q):
         return 0, 0, 0, 0, 0, T_rf_sto, 0, True
 
     for conn_id, limits in plant.model_data['limiting_mass_flow'].items():
-        conn = model.connections[conn_id]
+        conn = model.get_conn(conn_id)
         m_max = conn.m.design * limits[1]
         m_min = conn.m.design * limits[0]
         m = conn.m.val_SI
@@ -446,10 +439,10 @@ def sim_IF_charge(plant, T_rf_sys, T_rf_sto, Q, ttd, T_ff_sto_max):
         T_ff_sto = T_rf_sys - ttd
 
     # specify system parameters
-    rf_sto_conn = model.connections[plant.model_data['rf_sto']]
-    ff_sto_conn = model.connections[plant.model_data['ff_sto']]
-    rf_sys_conn = model.connections[plant.model_data['rf_sys']]
-    ff_sys_conn = model.connections[plant.model_data['ff_sys']]
+    rf_sto_conn = model.get_conn(plant.model_data['rf_sto'])
+    ff_sto_conn = model.get_conn(plant.model_data['ff_sto'])
+    rf_sys_conn = model.get_conn(plant.model_data['rf_sys'])
+    ff_sys_conn = model.get_conn(plant.model_data['ff_sys'])
     heat_bus_sys = model.busses[plant.model_data['heat_bus_sys']]
     Q_old = heat_bus_sys.P.val
     T_rf_sto_old = rf_sto_conn.T.val
@@ -503,7 +496,7 @@ def sim_IF_charge(plant, T_rf_sys, T_rf_sto, Q, ttd, T_ff_sto_max):
         return 0, 0, 0, 0, 0, T_rf_sto_old, 0, True
 
     for conn_id, limits in plant.model_data['limiting_mass_flow'].items():
-        conn = model.connections[conn_id]
+        conn = model.get_conn(conn_id)
         m_max = conn.m.design * limits[1]
         m_min = conn.m.design * limits[0]
         m = conn.m.val_SI
